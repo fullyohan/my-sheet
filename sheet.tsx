@@ -38,6 +38,7 @@ import React, { useMemo, useState, useEffect } from "react"
 import axios from "axios"
 
 export interface TimeSlotData {
+  date?: string
   capacity: number
   consumedHours: number
   leaveType?: string | null
@@ -174,7 +175,7 @@ export default function CapacityGrid() {
       setResources(resp.data.resources || [])
       setTimeSlots(resp.data.timeSlots || [])
     } catch (e) {
-      console.error("Erreur lors de la récupération :", e)
+      console.error("Erreur lors de la récupération des ressources :", e)
     }
   }
 
@@ -182,12 +183,30 @@ export default function CapacityGrid() {
     fetchRessources()
   }, [])
 
-  // 🗓️ GESTION DU CALENDRIER & SLOTS
-  // Tri mémoïsé des dates du backend pour éviter de re-trier dans le JSX
-  const sortedTimeSlots = useMemo(() => {
-    return [...timeSlots].sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime()
-    )
+  // 🗓️ 1. Génération explicite de TOUTES les dates sans sauts du calendrier (Start -> End)
+  const continuousTimeSlots = useMemo(() => {
+    if (!timeSlots || timeSlots.length === 0) return []
+
+    const dates = timeSlots
+      .map((d) => new Date(d))
+      .filter((d) => !isNaN(d.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime())
+
+    if (dates.length === 0) return []
+
+    const start = new Date(dates[0])
+    const end = new Date(dates[dates.length - 1])
+
+    const fullCalendar: string[] = []
+    const current = new Date(start)
+
+    while (current <= end) {
+      const isoDate = current.toISOString().split("T")[0]
+      fullCalendar.push(isoDate)
+      current.setDate(current.getDate() + 1)
+    }
+
+    return fullCalendar
   }, [timeSlots])
 
   // Extraction dynamique des Sprints
@@ -269,7 +288,7 @@ export default function CapacityGrid() {
         </div>
       </div>
 
-      {/* TABLEAU */}
+      {/* TABLEAU GRILLE DE CAPACITÉ */}
       <section className="mt-6">
         <TableRoot className="overflow-x-auto">
           <Table className="border-none">
@@ -282,13 +301,13 @@ export default function CapacityGrid() {
                   </span>
                 </TableHeaderCell>
 
-                {/* RENDU CHRONOLOGIQUE SÉCURISÉ */}
-                {sortedTimeSlots.map((slotDate) => (
+                {/* EN-TÊTE : Affiche TOUS les jours du calendrier sans sauts */}
+                {continuousTimeSlots.map((dateStr) => (
                   <TableHeaderCell
-                    key={slotDate}
+                    key={dateStr}
                     className="border-none text-center font-medium text-gray-700 capitalize whitespace-nowrap dark:text-gray-300"
                   >
-                    {new Date(slotDate).toLocaleDateString("fr-FR", {
+                    {new Date(dateStr).toLocaleDateString("fr-FR", {
                       weekday: "short",
                       day: "2-digit",
                       month: "2-digit",
@@ -299,97 +318,110 @@ export default function CapacityGrid() {
             </TableHead>
 
             <TableBody>
-  {filteredResources.map((resource) => (
-    <TableRow key={resource.resourceEmail || resource.resourceId} className="h-full">
-      {/* Colonne fixe : Nom de la ressource */}
-      <TableCell className="sticky left-0 z-10 h-full bg-white p-0 sm:min-w-56 dark:bg-gray-950">
-        <button
-          className={cx(
-            "group relative h-full w-full rounded p-2 text-left transition hover:bg-gray-100 focus-visible:bg-gray-100 hover:dark:bg-gray-900 focus-visible:dark:bg-gray-900",
-            focusRing
-          )}
-          onClick={() => setSelectedResource(resource)}
-        >
-          <RiExpandDiagonalLine className="absolute right-3 top-3 size-4 text-gray-500/0 transition group-hover:text-gray-500 group-focus-visible:text-gray-500" />
-          <span className="block text-sm font-medium text-gray-900 dark:text-gray-50">
-            {resource.resourceName}
-          </span>
-          <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-            {resource.team} • {resource.totalCapacity}h max
-          </span>
-        </button>
-      </TableCell>
+              {filteredResources.map((resource) => {
+                // Indexation Date -> Slot pour alignement parfait
+                const slotsByDate = new Map<string, TimeSlotData | null>()
+                resource.slots.forEach((slot, index) => {
+                  const rawDate = slot?.date || timeSlots[index]
+                  if (rawDate) {
+                    const formattedKey = new Date(rawDate).toISOString().split("T")[0]
+                    slotsByDate.set(formattedKey, slot)
+                  }
+                })
 
-      {/* 🗓️ PARCOURS PAR DATES DU CALENDRIER (Alinea garanti) */}
-      {sortedTimeSlots.map((dateStr, index) => {
-        // 💡 Recherche du slot par date ou par index de fallback
-        const slot = resource.slots.find((s) => s?.date === dateStr) ?? resource.slots[index]
+                return (
+                  <TableRow key={resource.resourceEmail || resource.resourceId} className="h-full">
+                    {/* Colonne Fixe Ressource */}
+                    <TableCell className="sticky left-0 z-10 h-full bg-white p-0 sm:min-w-56 dark:bg-gray-950">
+                      <button
+                        className={cx(
+                          "group relative h-full w-full rounded p-2 text-left transition hover:bg-gray-100 focus-visible:bg-gray-100 hover:dark:bg-gray-900 focus-visible:dark:bg-gray-900",
+                          focusRing
+                        )}
+                        onClick={() => setSelectedResource(resource)}
+                      >
+                        <RiExpandDiagonalLine className="absolute right-3 top-3 size-4 text-gray-500/0 transition group-hover:text-gray-500 group-focus-visible:text-gray-500" />
+                        <span className="block text-sm font-medium text-gray-900 dark:text-gray-50">
+                          {resource.resourceName}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                          {resource.team} • {resource.totalCapacity}h max
+                        </span>
+                      </button>
+                    </TableCell>
 
-        // 🟢 CAS 1 : Jour non saisi / Donnée manquante
-        if (!slot) {
-          return (
-            <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
-              <div 
-                title="Aucune donnée saisie pour cette date"
-                className="flex h-[56px] flex-col items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50/30 dark:border-gray-800 dark:bg-gray-900/20"
-              >
-                <span className="text-[11px] font-medium text-gray-400 dark:text-gray-600">
-                  Non saisi
-                </span>
-              </div>
-            </TableCell>
-          )
-        }
+                    {/* RENDU DE CHAQUE JOUR CONTINU */}
+                    {continuousTimeSlots.map((dateStr) => {
+                      const slot = slotsByDate.get(dateStr)
 
-        // 🟢 CAS 2 : Congé
-        if (slot.leaveType) {
-          return (
-            <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
-              <div
-                title={slot.leaveType || "Congé"}
-                className="flex h-[56px] flex-col items-center justify-center rounded bg-gray-100/80 text-gray-500 dark:border-gray-800 dark:bg-gray-900/80 dark:text-gray-400"
-              >
-                <span className="text-xs font-medium">Congé</span>
-                <span className="text-[10px] opacity-75">Absent</span>
-              </div>
-            </TableCell>
-          )
-        }
+                      // 1. Jour non saisi / absent de l'API
+                      if (!slot) {
+                        return (
+                          <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
+                            <div 
+                              title={`Non saisi pour le ${dateStr}`}
+                              className="flex h-[56px] flex-col items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50/30 dark:border-gray-800 dark:bg-gray-900/20"
+                            >
+                              <span className="text-[11px] font-medium text-gray-400 dark:text-gray-600">
+                                Non saisi
+                              </span>
+                            </div>
+                          </TableCell>
+                        )
+                      }
 
-        // 🟢 CAS 3 : Overtime / Hors-capacité
-        if (!slot.capacity && slot.consumedHours) {
-          return (
-            <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
-              <div className="flex h-[56px] flex-col items-center justify-center rounded border border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
-                <span className="text-xs font-medium">Overtime</span>
-                <span className="text-[10px] font-semibold">{slot.consumedHours}h</span>
-              </div>
-            </TableCell>
-          )
-        }
+                      // 2. Congé
+                      if (slot.leaveType) {
+                        return (
+                          <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
+                            <div
+                              title={slot.leaveType || "Congé"}
+                              className="flex h-[56px] flex-col items-center justify-center rounded bg-gray-100/80 text-gray-500 dark:border-gray-800 dark:bg-gray-900/80 dark:text-gray-400"
+                            >
+                              <span className="text-xs font-medium">Congé</span>
+                              <span className="text-[10px] opacity-75">Absent</span>
+                            </div>
+                          </TableCell>
+                        )
+                      }
 
-        // 🟢 CAS 4 : Jour travaillé normal
-        const loadPercentage = Math.round((slot.consumedHours / slot.capacity) * 100)
+                      // 3. Overtime
+                      if (!slot.capacity && slot.consumedHours) {
+                        return (
+                          <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
+                            <div className="flex h-[56px] flex-col items-center justify-center rounded border border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
+                              <span className="text-xs font-medium">Overtime</span>
+                              <span className="text-[10px] font-semibold">{slot.consumedHours}h</span>
+                            </div>
+                          </TableCell>
+                        )
+                      }
 
-        return (
-          <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
-            <div
-              className={cx(
-                "flex h-[56px] flex-col items-center justify-center rounded px-2 py-1.5 transition-all",
-                getCapacityBgColor(loadPercentage)
-              )}
-            >
-              <span className="block text-sm font-semibold">{loadPercentage}%</span>
-              <span className="mt-0.5 block text-xs opacity-80">
-                {slot.consumedHours} / {slot.capacity}h
-              </span>
-            </div>
-          </TableCell>
-        )
-      })}
-    </TableRow>
-  ))}
-</TableBody>
+                      // 4. Jour normal avec charge
+                      const loadPercentage = Math.round(
+                        (slot.consumedHours / slot.capacity) * 100
+                      )
+
+                      return (
+                        <TableCell key={dateStr} className="h-full min-w-24 p-[2px]">
+                          <div
+                            className={cx(
+                              "flex h-[56px] flex-col items-center justify-center rounded px-2 py-1.5 transition-all",
+                              getCapacityBgColor(loadPercentage)
+                            )}
+                          >
+                            <span className="block text-sm font-semibold">{loadPercentage}%</span>
+                            <span className="mt-0.5 block text-xs opacity-80">
+                              {slot.consumedHours} / {slot.capacity}h
+                            </span>
+                          </div>
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                )
+              })}
+            </TableBody>
           </Table>
         </TableRoot>
 
@@ -422,6 +454,10 @@ export default function CapacityGrid() {
         <div className="flex items-center gap-1.5">
           <span className="size-3 rounded border border-gray-300 bg-gray-100 dark:border-gray-700 dark:bg-gray-800" />
           <span>Congé / Absence</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="size-3 rounded border border-dashed border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900" />
+          <span>Non saisi</span>
         </div>
       </section>
     </main>
