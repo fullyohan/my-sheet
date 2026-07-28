@@ -70,7 +70,6 @@ export default function AnalyticsDashboard() {
     }
   }, [projectId, moduleId])
 
-  // Calculs dynamiques basés sur la réponse API
   const estimatedHours = capacity?.estimatedHours || 0
   const consumedHours = capacity?.consumedHours || 0
   const hoursOverrun = Math.max(0, consumedHours - estimatedHours)
@@ -109,10 +108,10 @@ export default function AnalyticsDashboard() {
         </div>
       </div>
 
-      {/* Grid Principal de 4 Cartes : 2x2 avec la Card Taux d'Occupation occupant 2 Rows */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Grid structuré en 3 rangées */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         
-        {/* KPI 1 : Capacité Planifiée */}
+        {/* ROW 1: Capacité Planifiée */}
         <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
           <div>
             <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -124,26 +123,20 @@ export default function AnalyticsDashboard() {
           </div>
           <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
             Période : ce mois-ci (RM{" "}
-            <span
-              className="font-mono font-medium"
-              style={{ color: "#048890" }}
-            >
+            <span className="font-mono font-medium" style={{ color: "#048890" }}>
               Scheduled
             </span>
             )
           </p>
         </Card>
 
-        {/* KPI 2 : Estimation Jira */}
+        {/* ROW 1: Estimation Initiale */}
         <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
           <div>
             <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Estimation initiale (Jira)
             </dt>
-            <dd
-              className="mt-2 text-3xl font-semibold tracking-tight"
-              style={{ color: "#048890" }}
-            >
+            <dd className="mt-2 text-3xl font-semibold tracking-tight" style={{ color: "#048890" }}>
               {capacity?.estimatedHours ?? 0}h{" "}
               <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
                 estimées
@@ -155,21 +148,21 @@ export default function AnalyticsDashboard() {
           </p>
         </Card>
 
-        {/* KPI 3 : Taux d'Occupation (PREND 2 ROWS DE HAUTEUR EN DESKTOP) */}
-        <Card className="flex flex-col justify-between sm:col-span-2 lg:col-span-1 lg:row-span-2 dark:border-gray-800 dark:bg-gray-900/80">
+        {/* ROW 1 & 2: Taux d'Occupation Réel (Prend 2 Rows en hauteur) */}
+        <Card className="flex flex-col justify-between lg:row-span-2 dark:border-gray-800 dark:bg-gray-900/80">
           <div>
             <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Taux d'Occupation Réel
             </dt>
             <p className="mt-1 text-xs text-gray-400">
-              Rapport entre heures consommées et capacité réelle planifiée.
+              Consommation sur capacité planifiée.
             </p>
           </div>
 
           <div className="my-auto flex flex-col items-center justify-center py-6 text-center">
             <ProgressCircle
               value={capacity?.occupancyRatePct ?? 0}
-              radius={60}
+              radius={65}
               strokeWidth={8}
             />
             <dd className="mt-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
@@ -185,24 +178,24 @@ export default function AnalyticsDashboard() {
               <div className="flex items-center gap-2 text-xs font-medium text-rose-600 dark:text-rose-400">
                 <RiTimeLine className="size-4 shrink-0" />
                 <span>
-                  Dépassement de {hoursOverrun}h (+{hoursOverrunPct}%) par rapport aux estimations.
+                  Dépassement de {hoursOverrun}h (+{hoursOverrunPct}%)
                 </span>
               </div>
             </div>
           )}
         </Card>
 
-        {/* KPI 4 : Avancement des tickets */}
-        <Card className="dark:border-gray-800 dark:bg-gray-900/80">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Avancement du Backlog (Jira)
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-50">
-            {backlogProgress?.ticketsDone ?? 0} / {backlogProgress?.totalTickets ?? 0}{" "}
-            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-              ({backlogProgress?.progressPct ?? 0}%)
+        {/* ROW 2: Avancement des Tickets (Occupe 2 colonnes en Row 2) */}
+        <Card className="lg:col-span-2 dark:border-gray-800 dark:bg-gray-900/80">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Avancement du Backlog (Jira)
+            </p>
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">
+              {backlogProgress?.ticketsDone ?? 0} / {backlogProgress?.totalTickets ?? 0} tickets
             </span>
-          </p>
+          </div>
+
           <CategoryBar
             values={[
               backlogProgress?.progressPct || 0,
@@ -212,47 +205,66 @@ export default function AnalyticsDashboard() {
             showLabels={false}
             className="mt-4"
           />
+
+          <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <span>Progression globale</span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              {backlogProgress?.progressPct ?? 0}% complet
+            </span>
+          </div>
         </Card>
 
-        {/* KPI 5 : Ventilation des Tickets */}
-        <Card className="dark:border-gray-800 dark:bg-gray-900/80">
-          <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            Ventilation des Tickets
-          </h2>
+        {/* ROW 3: Ventilation des Tickets (Prend toute la largeur de la rangée 3) */}
+        <Card className="lg:col-span-3 dark:border-gray-800 dark:bg-gray-900/80">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                Ventilation des Tickets (Jira Issue Types)
+              </h2>
+              <p className="text-xs text-gray-400">Répartition du volume de travail par typologie</p>
+            </div>
+          </div>
+
           <CategoryBar
             values={[
               workDistribution?.featuresPct || 0,
-              workDistribution?.MaintenancePct || 0,
               workDistribution?.BugsPct || 0,
+              workDistribution?.MaintenancePct || 0,
             ]}
-            colors={["cyan", "amber", "rose"]}
+            colors={["cyan", "rose", "amber"]}
             showLabels={false}
-            className="mt-3"
+            className="mt-4"
           />
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-            <div className="flex flex-col">
-              <span className="inline-flex items-center gap-1 font-semibold text-gray-900 dark:text-gray-50">
-                <RiStackLine className="size-3.5" style={{ color: "#048890" }} />
-                {workDistribution?.featuresPct ?? 0}%
-              </span>
-              <span className="text-gray-500 dark:text-gray-400">Features</span>
+          <div className="mt-4 grid grid-cols-3 gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <RiStackLine className="size-4 shrink-0" style={{ color: "#048890" }} />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.featuresPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Features / Stories</p>
+              </div>
             </div>
 
-            <div className="flex flex-col">
-              <span className="inline-flex items-center gap-1 font-semibold text-gray-900 dark:text-gray-50">
-                <RiBugLine className="size-3.5 text-rose-500 dark:text-rose-400" />
-                {workDistribution?.BugsPct ?? 0}%
-              </span>
-              <span className="text-gray-500 dark:text-gray-400">Bugs</span>
+            <div className="flex items-center gap-2">
+              <RiBugLine className="size-4 shrink-0 text-rose-500 dark:text-rose-400" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.BugsPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Bugs / Anomalies</p>
+              </div>
             </div>
 
-            <div className="flex flex-col">
-              <span className="inline-flex items-center gap-1 font-semibold text-gray-900 dark:text-gray-50">
-                <RiCheckDoubleLine className="size-3.5 text-amber-500 dark:text-amber-400" />
-                {workDistribution?.MaintenancePct ?? 0}%
-              </span>
-              <span className="text-gray-500 dark:text-gray-400">Dette</span>
+            <div className="flex items-center gap-2">
+              <RiCheckDoubleLine className="size-4 shrink-0 text-amber-500 dark:text-amber-400" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.MaintenancePct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Dette Technique / Tâches</p>
+              </div>
             </div>
           </div>
         </Card>
