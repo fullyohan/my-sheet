@@ -1,107 +1,278 @@
 "use client"
 
-import React from "react"
-import Link from "next/link"
-import { RiFolderAddLine, RiFolderLine, RiCodeBoxLine, RiArrowRightSLine } from "@remixicon/react"
-import { useProjects } from "@/context/ProjectContext"
+import React, { useEffect, useState } from "react"
+import { Card } from "@/components/Card"
+import { ProgressCircle } from "@/components/ProgressCircle"
+import { CategoryBar } from "@/components/CategoryBar"
 
-export default function Index() {
-  const { projects, isLoading } = useProjects()
+import {
+  RiCheckDoubleLine,
+  RiBugLine,
+  RiStackLine,
+  RiFilter3Line,
+  RiCodeBoxLine,
+  RiSearchEyeLine,
+  RiFileList3Line,
+} from "@remixicon/react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/Select"
+import axios from "axios"
+import { useParams } from "next/navigation"
+
+interface Capacity {
+  capacityRealHours: number
+  consumedHours: number
+  occupancyRatePct: number
+}
+
+interface BacklogProgress {
+  totalTickets: number
+  ticketsDone: number
+  progressPct: number
+}
+
+interface WorkDistribution {
+  storiesPct: number
+  featuresPct: number
+  techStoriesPct: number
+  bugsPct: number
+  tasksPct: number
+  spikesPct: number
+}
+
+export default function AnalyticsDashboard() {
+  const [teams, setTeams] = useState<string[]>([])
+  const [selectedTeam, setSelectedTeam] = useState("ALL")
+  const [capacity, setCapacity] = useState<Capacity | null>(null)
+  const [backlogProgress, setBacklogProgress] = useState<BacklogProgress | null>(null)
+  const [workDistribution, setWorkDistribution] = useState<WorkDistribution | null>(null)
+
+  const { projectId, moduleId } = useParams()
+
+  useEffect(() => {
+    const fetchKpis = async () => {
+      try {
+        const resp = await axios.get(
+          `http://localhost:8000/api/v1/projects/${projectId}/${moduleId}/overview`
+        )
+        setTeams(resp.data.teams || [])
+        setCapacity(resp.data.capacity || null)
+        setBacklogProgress(resp.data.backlogProgress || null)
+        setWorkDistribution(resp.data.workDistribution || null)
+      } catch (error) {
+        console.error("Erreur lors de la récupération des KPIs:", error)
+      }
+    }
+
+    if (projectId && moduleId) {
+      fetchKpis()
+    }
+  }, [projectId, moduleId])
 
   return (
-    <div className="w-full max-w-2xl mx-auto py-8 px-4 text-left">
-      {/* En-tête de la page */}
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 tracking-tight">
-        Sélectionnez un projet
-      </h1>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-        Choisissez un projet ou un module dans l&apos;arborescence ci-dessous pour charger son tableau de bord.
-      </p>
-
-      <div className="mt-6 space-y-4">
-        {/* En-tête Arborescence */}
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            Arborescence des projets
-          </span>
-          <span className="text-xs font-medium text-gray-400">
-            {projects.length} projet{projects.length > 1 ? "s" : ""}
-          </span>
+    <main className="min-h-screen bg-gray-50/30 p-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
+      {/* Filtres */}
+      <div className="mb-6 flex flex-col gap-1.5">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          <RiFilter3Line className="size-4 shrink-0 text-gray-500" />
+          <span>Filtres :</span>
         </div>
-
-        {/* Arbre des Projets & Modules */}
-        <div className="bg-gray-50/70 dark:bg-gray-800/40 border border-gray-200/80 dark:border-gray-800 rounded-xl p-3 max-h-96 overflow-y-auto space-y-2 divide-y divide-gray-100 dark:divide-gray-800/60">
-          {isLoading ? (
-            <div className="p-4 text-center text-xs text-gray-400">Chargement des projets...</div>
-          ) : projects.length === 0 ? (
-            <div className="p-4 text-center text-xs text-gray-400">Aucun projet disponible</div>
-          ) : (
-            projects.map((project) => (
-              <div key={project.id} className="pt-2 first:pt-0 space-y-1">
-                {/* Projet sans sous-modules */}
-                {!project.hasModules ? (
-                  <Link
-                    href={`/projects/${project.id}`}
-                    className="group flex items-center justify-between p-2.5 rounded-lg hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm border border-transparent hover:border-gray-200/60 dark:hover:border-gray-700/60 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <RiFolderLine className="w-5 h-5 text-[#048890]" />
-                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 group-hover:text-[#048890] transition-colors">
-                        {project.name}
-                      </span>
-                    </div>
-                    <RiArrowRightSLine className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </Link>
-                ) : (
-                  /* Projet avec sous-modules */
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-bold text-[#048890] uppercase tracking-wider">
-                      <RiFolderLine className="w-4 h-4 text-[#048890]" />
-                      <span>{project.name}</span>
-                    </div>
-
-                    {/* Sous-modules */}
-                    <div className="ml-4 pl-3 border-l-2 border-gray-200 dark:border-gray-700/80 space-y-1">
-                      {project.modules?.map((module: any) => (
-                        <Link
-                          key={module.id}
-                          href={`/projects/${project.id}/modules/${module.id}`}
-                          className="group flex items-center justify-between p-2 rounded-md hover:bg-white dark:hover:bg-gray-800 hover:shadow-sm border border-transparent hover:border-gray-200/60 dark:hover:border-gray-700/60 transition-all"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <RiCodeBoxLine className="w-4 h-4 text-gray-400 group-hover:text-[#048890] transition-colors" />
-                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-[#048890] transition-colors">
-                              Module : {module.name}
-                            </span>
-                          </div>
-                          <RiArrowRightSLine className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+        <div className="shadow-xs flex flex-wrap items-center gap-4 rounded-xl border border-gray-200/80 bg-white p-3 dark:border-gray-800 dark:bg-gray-900/60 dark:backdrop-blur">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="team-select"
+              className="text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
+              Département / Équipe :
+            </label>
+            <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+              <SelectTrigger className="w-[180px] dark:border-gray-800 dark:bg-gray-950">
+                <SelectValue placeholder="Toutes les équipes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Toutes les équipes</SelectItem>
+                {teams.map((team) => (
+                  <SelectItem key={team} value={team}>
+                    {team}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-
-        {/* Séparateur */}
-        <div className="relative my-6 flex items-center justify-center">
-          <div className="w-full border-t border-gray-200 dark:border-gray-800"></div>
-          <span className="absolute bg-white dark:bg-gray-950 px-3 text-[11px] uppercase tracking-wider font-semibold text-gray-400">
-            Ou
-          </span>
-        </div>
-
-        {/* Bouton d'action */}
-        <button
-          type="button"
-          className="w-full h-11 inline-flex items-center justify-center gap-2 px-4 text-sm font-semibold text-white bg-[#048890] hover:bg-[#036e74] active:bg-[#02555a] rounded-xl transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-[#048890] cursor-pointer"
-        >
-          <RiFolderAddLine className="w-4 h-4" />
-          <span>Importer un nouveau projet</span>
-        </button>
       </div>
-    </div>
+
+      {/* Grille de cartes */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Capacité Planifiée */}
+        <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
+          <div>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Capacité Planifiée
+            </dt>
+            <dd className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+              {capacity?.capacityRealHours ?? 0}h
+            </dd>
+          </div>
+          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+            Heures totales réservées pour l'équipe
+          </p>
+        </Card>
+
+        {/* Taux d'Occupation Réel */}
+        <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
+          <div>
+            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Taux d'Occupation Réel
+            </dt>
+            <p className="mt-1 text-xs text-gray-400">
+              Consommation basée sur la capacité planifiée.
+            </p>
+          </div>
+
+          <div className="my-auto flex flex-col items-center justify-center py-4 text-center">
+            <ProgressCircle
+              value={capacity?.occupancyRatePct ?? 0}
+              radius={55}
+              strokeWidth={7}
+            />
+            <dd className="mt-3 text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              {capacity?.occupancyRatePct ?? 0}%
+            </dd>
+            <p className="mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+              {capacity?.consumedHours ?? 0}h consommées / {capacity?.capacityRealHours ?? 0}h
+            </p>
+          </div>
+        </Card>
+
+        {/* Avancement du Backlog */}
+        <Card className="lg:col-span-2 dark:border-gray-800 dark:bg-gray-900/80">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Avancement du Backlog (Jira)
+            </p>
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">
+              {backlogProgress?.ticketsDone ?? 0} / {backlogProgress?.totalTickets ?? 0} tickets
+            </span>
+          </div>
+
+          <CategoryBar
+            values={[
+              backlogProgress?.progressPct || 0,
+              100 - (backlogProgress?.progressPct || 0),
+            ]}
+            colors={["emerald", "gray"]}
+            showLabels={false}
+            className="mt-4"
+          />
+
+          <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <span>Progression globale</span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              {backlogProgress?.progressPct ?? 0}% complet
+            </span>
+          </div>
+        </Card>
+
+        {/* Ventilation des Tickets (Détaillée) */}
+        <Card className="lg:col-span-2 dark:border-gray-800 dark:bg-gray-900/80">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                Ventilation des Tickets (Jira Issue Types)
+              </h2>
+              <p className="text-xs text-gray-400">Répartition détaillée du volume de travail par typologie</p>
+            </div>
+          </div>
+
+          <CategoryBar
+            values={[
+              workDistribution?.storiesPct || 0,
+              workDistribution?.featuresPct || 0,
+              workDistribution?.techStoriesPct || 0,
+              workDistribution?.bugsPct || 0,
+              workDistribution?.tasksPct || 0,
+              workDistribution?.spikesPct || 0,
+            ]}
+            colors={["cyan", "blue", "indigo", "red", "amber", "violet"]}
+            showLabels={false}
+            className="mt-4"
+          />
+
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6 text-xs">
+            {/* Story */}
+            <div className="flex items-center gap-2">
+              <RiStackLine className="size-4 shrink-0 text-cyan-500" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.storiesPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Stories</p>
+              </div>
+            </div>
+
+            {/* Feature */}
+            <div className="flex items-center gap-2">
+              <RiCheckDoubleLine className="size-4 shrink-0 text-blue-500" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.featuresPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Fonctionnalités</p>
+              </div>
+            </div>
+
+            {/* Tech Story */}
+            <div className="flex items-center gap-2">
+              <RiCodeBoxLine className="size-4 shrink-0 text-indigo-500" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.techStoriesPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Tech Stories</p>
+              </div>
+            </div>
+
+            {/* Bug */}
+            <div className="flex items-center gap-2">
+              <RiBugLine className="size-4 shrink-0 text-red-500 dark:text-red-400" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.bugsPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Bugs</p>
+              </div>
+            </div>
+
+            {/* Task */}
+            <div className="flex items-center gap-2">
+              <RiFileList3Line className="size-4 shrink-0 text-amber-500" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.tasksPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Tâches</p>
+              </div>
+            </div>
+
+            {/* Spike */}
+            <div className="flex items-center gap-2">
+              <RiSearchEyeLine className="size-4 shrink-0 text-violet-500" />
+              <div>
+                <span className="font-semibold text-gray-900 dark:text-gray-50">
+                  {workDistribution?.spikesPct ?? 0}%
+                </span>
+                <p className="text-gray-500 dark:text-gray-400">Spikes</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </main>
   )
 }
