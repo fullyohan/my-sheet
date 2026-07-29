@@ -13,6 +13,7 @@ import {
   RiCodeBoxLine,
   RiSearchEyeLine,
   RiFileList3Line,
+  RiLoader4Line,
 } from "@remixicon/react"
 import {
   Select,
@@ -51,21 +52,32 @@ export default function AnalyticsDashboard() {
   const [capacity, setCapacity] = useState<Capacity | null>(null)
   const [backlogProgress, setBacklogProgress] = useState<BacklogProgress | null>(null)
   const [workDistribution, setWorkDistribution] = useState<WorkDistribution | null>(null)
+  
+  // États de chargement et d'erreur
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const { projectId, moduleId } = useParams()
 
   useEffect(() => {
     const fetchKpis = async () => {
       try {
+        setLoading(true)
+        setError(null)
+
         const resp = await axios.get(
           `http://localhost:8000/api/v1/projects/${projectId}/${moduleId}/overview`
         )
+        
         setTeams(resp.data.teams || [])
         setCapacity(resp.data.capacity || null)
         setBacklogProgress(resp.data.backlogProgress || null)
         setWorkDistribution(resp.data.workDistribution || null)
-      } catch (error) {
-        console.error("Erreur lors de la récupération des KPIs:", error)
+      } catch (err) {
+        console.error("Erreur lors de la récupération des KPIs:", err)
+        setError("Impossible de charger les données du tableau de bord.")
+      } finally {
+        setLoading(false)
       }
     }
 
@@ -74,6 +86,51 @@ export default function AnalyticsDashboard() {
     }
   }, [projectId, moduleId])
 
+  // --- RENDU EN CAS DE CHARGEMENT (SKELETON) ---
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gray-50/30 p-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
+        {/* Header / Filtre Skeleton */}
+        <div className="mb-6 flex animate-pulse flex-col gap-2">
+          <div className="h-4 w-24 rounded bg-gray-200 dark:bg-gray-800"></div>
+          <div className="h-12 w-full rounded-xl border border-gray-200/80 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"></div>
+        </div>
+
+        {/* Dynamic Spinner Header */}
+        <div className="mb-6 flex items-center justify-center gap-2 text-sm text-gray-500">
+          <RiLoader4Line className="size-5 animate-spin text-cyan-500" />
+          <span>Chargement des métriques en cours...</span>
+        </div>
+
+        {/* Cards Skeleton Grid */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card className="h-40 animate-pulse bg-gray-100/80 dark:border-gray-800 dark:bg-gray-900/40" />
+          <Card className="h-40 animate-pulse bg-gray-100/80 dark:border-gray-800 dark:bg-gray-900/40" />
+          <Card className="h-36 animate-pulse lg:col-span-2 bg-gray-100/80 dark:border-gray-800 dark:bg-gray-900/40" />
+          <Card className="h-48 animate-pulse lg:col-span-2 bg-gray-100/80 dark:border-gray-800 dark:bg-gray-900/40" />
+        </div>
+      </main>
+    )
+  }
+
+  // --- RENDU EN CAS D'ERREUR ---
+  if (error) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-50/30 p-6 dark:bg-gray-950">
+        <Card className="max-w-md text-center dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-sm font-medium text-red-500">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white dark:bg-gray-100 dark:text-gray-900"
+          >
+            Réessayer
+          </button>
+        </Card>
+      </main>
+    )
+  }
+
+  // --- RENDU FINAL (DONNÉES CHARGÉES) ---
   return (
     <main className="min-h-screen bg-gray-50/30 p-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
       {/* Filtres */}
@@ -179,7 +236,7 @@ export default function AnalyticsDashboard() {
           </div>
         </Card>
 
-        {/* Ventilation des Tickets (Détaillée) */}
+        {/* Ventilation des Tickets */}
         <Card className="lg:col-span-2 dark:border-gray-800 dark:bg-gray-900/80">
           <div className="flex items-center justify-between">
             <div>
@@ -205,7 +262,6 @@ export default function AnalyticsDashboard() {
           />
 
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6 text-xs">
-            {/* Story */}
             <div className="flex items-center gap-2">
               <RiStackLine className="size-4 shrink-0 text-cyan-500" />
               <div>
@@ -216,7 +272,6 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-            {/* Feature */}
             <div className="flex items-center gap-2">
               <RiCheckDoubleLine className="size-4 shrink-0 text-blue-500" />
               <div>
@@ -227,7 +282,6 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-            {/* Tech Story */}
             <div className="flex items-center gap-2">
               <RiCodeBoxLine className="size-4 shrink-0 text-indigo-500" />
               <div>
@@ -238,7 +292,6 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-            {/* Bug */}
             <div className="flex items-center gap-2">
               <RiBugLine className="size-4 shrink-0 text-red-500 dark:text-red-400" />
               <div>
@@ -249,7 +302,6 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-            {/* Task */}
             <div className="flex items-center gap-2">
               <RiFileList3Line className="size-4 shrink-0 text-amber-500" />
               <div>
@@ -260,7 +312,6 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-            {/* Spike */}
             <div className="flex items-center gap-2">
               <RiSearchEyeLine className="size-4 shrink-0 text-violet-500" />
               <div>
