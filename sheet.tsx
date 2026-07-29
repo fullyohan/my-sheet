@@ -1,445 +1,102 @@
 "use client"
 
-import React, { useEffect, useState, useRef } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { DropdownUserProfile } from "@/components/ui/UserProfile"
+import React, { useState } from "react"
 import {
-  RiFolder3Line,
-  RiFolderOpenLine,
-  RiStackLine,
-  RiArrowDownSLine,
-  RiArrowRightSLine,
-  RiSidebarFoldLine,
-  RiSidebarUnfoldLine,
-  RiEditLine,
-  RiAddLine,
-  RiDeleteBinLine,
-} from "@remixicon/react"
-import { CreationDialog } from "./CreationDialog"
-import axios from "axios"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/DropdownMenu"
+import { RiEditLine, RiDeleteBinLine } from "@remixicon/react"
 
-export interface Module {
-  id: string
-  name: string
+interface ProjectContextMenuProps {
+  project: { id: string; name: string }
+  onEdit: (project: any) => void
+  onDelete: (project: any) => void
+  children: React.ReactNode
 }
 
-export interface Project {
-  id: string
-  name: string
-  hasModules: boolean
-  modules?: Module[]
-  lastUpdate?: Date
-}
+export function ProjectContextMenu({
+  project,
+  onEdit,
+  onDelete,
+  children,
+}: ProjectContextMenuProps) {
+  const [open, setOpen] = useState(false)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
 
-interface SidebarNavigationProps {
-  children?: React.ReactNode
-}
-
-type ContextMenuTarget =
-  | { type: "project"; project: Project }
-  | { type: "module"; project: Project; module: Module }
-  | null
-
-export function SidebarNavigation({ children }: SidebarNavigationProps) {
-  const pathname = usePathname()
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [isProjectsOpen, setIsProjectsOpen] = useState(true)
-  const [projects, setProjects] = useState<Project[]>([])
-  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({})
-
-  // Menu contextuel (clic droit)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
-  const [targetItem, setTargetItem] = useState<ContextMenuTarget>(null)
-
-  // Modales d'action
-  const [renameTarget, setRenameTarget] = useState<{ type: "project" | "module"; id: string; currentName: string } | null>(null)
-  const [addModuleProjectId, setAddModuleProjectId] = useState<string | null>(null)
-  const [inputValue, setInputValue] = useState("")
-
-  const contextMenuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    fetchProjects()
-  }, [])
-
-  // Fermer le menu contextuel au clic extérieur
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null)
-      }
-    }
-    window.addEventListener("click", handleClickOutside)
-    return () => window.removeEventListener("click", handleClickOutside)
-  }, [])
-
-  const fetchProjects = async () => {
-    try {
-      const resp = await axios.get("http://127.0.0.1:8000/api/v1/projects")
-      setProjects(resp.data.projects)
-    } catch (err) {
-      console.error("Erreur lors de la récupération des projets", err)
-    }
-  }
-
-  const toggleProject = (projectId: string) => {
-    setExpandedProjects((prev) => ({ ...prev, [projectId]: !prev[projectId] }))
-  }
-
-  // --- Handlers Menu Contextuel ---
-  const handleContextMenu = (e: React.MouseEvent, target: ContextMenuTarget) => {
+  const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY })
-    setTargetItem(target)
+    // Récupère les coordonnées du pointeur
+    setPosition({ x: e.clientX, y: e.clientY })
+    setOpen(true)
   }
-
-  // --- Actions ---
-  const handleOpenRename = () => {
-    if (!targetItem) return
-    if (targetItem.type === "project") {
-      setRenameTarget({ type: "project", id: targetItem.project.id, currentName: targetItem.project.name })
-    } else {
-      setRenameTarget({ type: "module", id: targetItem.module.id, currentName: targetItem.module.name })
-    }
-    setInputValue(targetItem.type === "project" ? targetItem.project.name : targetItem.module.name)
-    setContextMenu(null)
-  }
-
-  const handleOpenAddModule = () => {
-    if (targetItem?.type === "project") {
-      setAddModuleProjectId(targetItem.project.id)
-      setInputValue("")
-    }
-    setContextMenu(null)
-  }
-
-  const handleDelete = async () => {
-    if (!targetItem) return
-    const isProject = targetItem.type === "project"
-    const confirmMsg = isProject
-      ? `Supprimer le projet "${targetItem.project.name}" ?`
-      : `Supprimer le module "${targetItem.module.name}" ?`
-
-    if (!confirm(confirmMsg)) return
-
-    try {
-      if (isProject) {
-        await axios.delete(`http://127.0.0.1:8000/api/v1/projects/${targetItem.project.id}`)
-      } else {
-        await axios.delete(`http://127.0.0.1:8000/api/v1/modules/${targetItem.module.id}`)
-      }
-      fetchProjects()
-    } catch (err) {
-      console.error("Erreur lors de la suppression", err)
-    } finally {
-      setContextMenu(null)
-    }
-  }
-
-  const submitRename = async () => {
-    if (!renameTarget || !inputValue.trim()) return
-    try {
-      const endpoint =
-        renameTarget.type === "project"
-          ? `http://127.0.0.1:8000/api/v1/projects/${renameTarget.id}`
-          : `http://127.0.0.1:8000/api/v1/modules/${renameTarget.id}`
-
-      await axios.patch(endpoint, { name: inputValue })
-      fetchProjects()
-    } catch (err) {
-      console.error("Erreur lors du renommage", err)
-    } finally {
-      setRenameTarget(null)
-    }
-  }
-
-  const submitAddModule = async () => {
-    if (!addModuleProjectId || !inputValue.trim()) return
-    try {
-      await axios.post(`http://127.0.0.1:8000/api/v1/projects/${addModuleProjectId}/modules`, {
-        name: inputValue,
-      })
-      fetchProjects()
-    } catch (err) {
-      console.error("Erreur lors de la création du module", err)
-    } finally {
-      setAddModuleProjectId(null)
-    }
-  }
-
-  // Helpers pour les liens
-  const getProjectHref = (p: Project) => (p.hasModules ? null : `/projects/${p.id}/default/overview`)
-  const getModuleHref = (projectId: string, moduleId: string) => `/projects/${projectId}/${moduleId}/overview`
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      {!isCollapsed ? (
-        <aside className="flex flex-col border-r border-[#036c73] bg-[#048890] text-white transition-all duration-300 dark:border-gray-800 dark:bg-gray-900">
-          {/* Header Sidebar */}
-          <div className="flex h-16 items-center justify-between border-b border-white/10 px-4 dark:border-gray-800">
-            <Link href="/" className="flex items-center gap-2.5 truncate font-bold text-white">
-              <span className="truncate text-base tracking-wide">Dashboard</span>
-            </Link>
+    <div onContextMenu={handleContextMenu} className="w-full">
+      {/* Élément affiché (ton item de projet) */}
+      {children}
 
-            <div className="ml-3 flex flex-row items-center gap-1">
-              <CreationDialog />
-              <button
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="rounded-lg bg-[#048890] p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-                title="Réduire"
-              >
-                <RiSidebarFoldLine className="size-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Nav List */}
-          <nav className="flex-1 select-none space-y-2 overflow-y-auto px-4 py-5">
-            <div>
-              <button
-                onClick={() => setIsProjectsOpen(!isProjectsOpen)}
-                className="group flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-semibold uppercase tracking-wider text-white/70 transition-all hover:bg-white/10 hover:text-white"
-              >
-                <div className="flex items-center gap-2.5">
-                  <RiFolder3Line className="size-4 shrink-0" />
-                  <span>Projets</span>
-                </div>
-                {isProjectsOpen ? (
-                  <RiArrowDownSLine className="size-4 text-white/60" />
-                ) : (
-                  <RiArrowRightSLine className="size-4 text-white/60" />
-                )}
-              </button>
-
-              {isProjectsOpen && (
-                <div className="mt-1 space-y-1 pl-1">
-                  {projects.map((project) => {
-                    const projectHref = getProjectHref(project)
-                    const isProjectActive = projectHref ? pathname === projectHref : false
-                    const isChildActive = pathname.startsWith(`/projects/${project.id}/`)
-                    const isExpanded = !!expandedProjects[project.id]
-
-                    return (
-                      <div key={project.id} className="relative space-y-1">
-                        {/* Item Projet */}
-                        <div
-                          onContextMenu={(e) => handleContextMenu(e, { type: "project", project })}
-                          className={`group relative flex items-center justify-between rounded-md text-xs font-medium transition-all ${
-                            isProjectActive
-                              ? "bg-white font-bold text-[#048890] shadow-sm dark:bg-blue-600 dark:text-white"
-                              : isChildActive
-                              ? "bg-white/15 font-semibold text-white"
-                              : "text-white/85 hover:bg-white/10 hover:text-white"
-                          }`}
-                        >
-                          {(isProjectActive || isChildActive) && (
-                            <span className="absolute bottom-1.5 left-0 top-1.5 w-1 rounded-r-full bg-[#048890] dark:bg-white" />
-                          )}
-
-                          {/* Redirection uniquement si le projet N'A PAS de modules */}
-                          {projectHref ? (
-                            <Link href={projectHref} className="flex flex-1 items-center gap-2.5 truncate px-3 py-2">
-                              <RiFolder3Line className="size-4 shrink-0 text-white/80" />
-                              <span className="truncate">{project.name}</span>
-                            </Link>
-                          ) : (
-                            <div
-                              onClick={() => toggleProject(project.id)}
-                              className="flex flex-1 cursor-pointer items-center gap-2.5 truncate px-3 py-2"
-                            >
-                              {isExpanded ? (
-                                <RiFolderOpenLine className="size-4 shrink-0 text-white/80" />
-                              ) : (
-                                <RiFolder3Line className="size-4 shrink-0 text-white/80" />
-                              )}
-                              <span className="truncate">{project.name}</span>
-                            </div>
-                          )}
-
-                          {/* Bouton Toggle / Modificateurs */}
-                          {project.hasModules && (
-                            <div className="flex items-center gap-1 pr-2">
-                              <span className="rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold text-white/90">
-                                {project.modules?.length || 0}
-                              </span>
-                              <button
-                                onClick={() => toggleProject(project.id)}
-                                className="rounded p-1 text-white/70 hover:bg-white/20"
-                              >
-                                {isExpanded ? (
-                                  <RiArrowDownSLine className="size-3.5" />
-                                ) : (
-                                  <RiArrowRightSLine className="size-3.5" />
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Liste des modules */}
-                        {project.hasModules && isExpanded && (
-                          <div className="relative ml-5 space-y-1 pb-0.5 pt-1">
-                            <span className="absolute bottom-3.5 left-0 top-0 w-px border-l border-dashed border-white/40 dark:border-gray-700" />
-
-                            {project.modules?.map((module) => {
-                              const moduleHref = getModuleHref(project.id, module.id)
-                              const isModuleActive = pathname === moduleHref
-
-                              return (
-                                <div
-                                  key={module.id}
-                                  onContextMenu={(e) =>
-                                    handleContextMenu(e, { type: "module", project, module })
-                                  }
-                                  className="relative flex items-center pl-4"
-                                >
-                                  <span className="absolute left-0 top-1/2 h-px w-3.5 border-b border-dashed border-white/40 dark:border-gray-700" />
-
-                                  <Link
-                                    href={moduleHref}
-                                    className={`group flex flex-1 items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-all ${
-                                      isModuleActive
-                                        ? "bg-white font-bold text-[#048890] shadow-sm dark:bg-blue-500 dark:text-white"
-                                        : "text-white/80 hover:bg-white/10 hover:text-white"
-                                    }`}
-                                  >
-                                    <RiStackLine className="size-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
-                                    <span className="truncate">{module.name}</span>
-                                  </Link>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </nav>
-
-          {/* Footer User Profile */}
-          <div className="border-t border-white/10 p-3 dark:border-gray-800">
-            <DropdownUserProfile />
-          </div>
-        </aside>
-      ) : (
-        <aside className="p-2">
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        {/* Trigger invisible ancré à la position du clic droit */}
+        <DropdownMenuTrigger asChild>
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="rounded-lg bg-[#048890] p-3 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-            title="Agrandir"
-          >
-            <RiSidebarUnfoldLine className="size-5" />
-          </button>
-        </aside>
-      )}
+            style={{
+              position: "fixed",
+              top: position.y,
+              left: position.x,
+              width: 1,
+              height: 1,
+              opacity: 0,
+              pointerEvents: "none",
+            }}
+            tabIndex={-1}
+          />
+        </DropdownMenuTrigger>
 
-      {/* Contenu principal */}
-      <main className="flex-1 overflow-y-auto">{children}</main>
+        <DropdownMenuContent className="min-w-44" align="start">
+          <DropdownMenuLabel className="truncate">
+            {project.name}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
 
-      {/* --- MENU CONTEXTUEL (CLIC DROIT) --- */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-50 min-w-[160px] rounded-lg border border-gray-200 bg-white p-1 text-sm text-gray-800 shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-        >
-          <button
-            onClick={handleOpenRename}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            <RiEditLine className="size-4" />
-            Renommer
-          </button>
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => onEdit(project)}>
+              <span className="flex items-center gap-x-2">
+                <RiEditLine className="size-4 text-inherit" />
+                <span>Modifier / Mise à jour</span>
+              </span>
+            </DropdownMenuItem>
 
-          {targetItem?.type === "project" && (
-            <button
-              onClick={handleOpenAddModule}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-800"
+            <DropdownMenuItem
+              onClick={() => onDelete(project)}
+              className="text-red-600 dark:text-red-400"
             >
-              <RiAddLine className="size-4" />
-              Ajouter un module
-            </button>
-          )}
-
-          <button
-            onClick={handleDelete}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-          >
-            <RiDeleteBinLine className="size-4" />
-            Supprimer
-          </button>
-        </div>
-      )}
-
-      {/* --- MODALE : RENOMMER --- */}
-      {renameTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl dark:bg-gray-900">
-            <h3 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-              Renommer le {renameTarget.type === "project" ? "projet" : "module"}
-            </h3>
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              className="w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-              autoFocus
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setRenameTarget(null)}
-                className="rounded-md px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={submitRename}
-                className="rounded-md bg-[#048890] px-3 py-1.5 text-xs text-white hover:bg-[#036c73]"
-              >
-                Sauvegarder
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODALE : AJOUTER UN MODULE --- */}
-      {addModuleProjectId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl dark:bg-gray-900">
-            <h3 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-              Nouveau module
-            </h3>
-            <input
-              type="text"
-              placeholder="Nom du module..."
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              className="w-full rounded-md border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800"
-              autoFocus
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setAddModuleProjectId(null)}
-                className="rounded-md px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={submitAddModule}
-                className="rounded-md bg-[#048890] px-3 py-1.5 text-xs text-white hover:bg-[#036c73]"
-              >
-                Créer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <span className="flex items-center gap-x-2">
+                <RiDeleteBinLine className="size-4 text-inherit" />
+                <span>Supprimer</span>
+              </span>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
+
+
+
+<ProjectContextMenu
+  project={project}
+  onEdit={(proj) => setEditingProject(proj)}
+  onDelete={(proj) => handleDeleteProject(proj.id)}
+>
+  <div className="flex flex-1 items-center gap-2.5 truncate px-3 py-2">
+    <RiFolder3Line className="size-4 shrink-0" />
+    <span className="truncate">{project.name}</span>
+  </div>
+</ProjectContextMenu>
