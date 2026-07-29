@@ -1,275 +1,160 @@
-"use client"
-
-import React, { useEffect, useState } from "react"
-import { Card } from "@/components/Card"
-import { ProgressCircle } from "@/components/ProgressCircle"
-import { CategoryBar } from "@/components/CategoryBar"
-
-import {
-  RiTimeLine,
-  RiCheckDoubleLine,
-  RiBugLine,
-  RiStackLine,
-  RiFilter3Line,
-} from "@remixicon/react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/Select"
+import React, { useState } from "react"
 import axios from "axios"
-import { useParams } from "next/navigation"
+import { Button } from "@/components/Button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/Dialog"
+import { RiAddCircleLine } from "@remixicon/react"
+import { Input } from "../Input"
+import { Label } from "../Label"
+import { DropZone } from "../DropZone"
 
-interface Capacity {
-  capacityRealHours: number
-  estimatedHours: number
-  consumedHours: number
-  occupancyRatePct: number
-}
+export const CreationDialog = () => {
+  const [projectName, setProjectName] = useState("")
+  const [rmFile, setRmFile] = useState<File | null>(null)
+  const [jiraFile, setJiraFile] = useState<File | null>(null)
+  const [leavesFile, setLeavesFile] = useState<File | null>(null)
 
-interface BacklogProgress {
-  totalTickets: number
-  ticketsDone: number
-  progressPct: number
-}
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
 
-interface WorkDistribution {
-  featuresPct: number
-  BugsPct: number
-  MaintenancePct: number
-}
+  const isValid = Boolean(rmFile && jiraFile && leavesFile && projectName.trim())
 
-export default function AnalyticsDashboard() {
-  const [teams, setTeams] = useState<string[]>([])
-  const [selectedTeam, setSelectedTeam] = useState("ALL")
-  const [capacity, setCapacity] = useState<Capacity | null>(null)
-  const [backlogProgress, setBacklogProgress] = useState<BacklogProgress | null>(null)
-  const [workDistribution, setWorkDistribution] = useState<WorkDistribution | null>(null)
+  // Gestion de l'envoi du formulaire et des 3 fichiers
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isValid) return
 
-  const { projectId, moduleId } = useParams()
+    setLoading(true)
+    setError(null)
 
-  useEffect(() => {
-    const fetchKpis = async () => {
-      try {
-        const resp = await axios.get(
-          `http://localhost:8000/api/v1/projects/${projectId}/${moduleId}/overview`
-        )
-        setTeams(resp.data.teams || [])
-        setCapacity(resp.data.capacity)
-        setBacklogProgress(resp.data.backlogProgress || null)
-        setWorkDistribution(resp.data.workDistribution || null)
-      } catch (error) {
-        console.error("Erreur lors de la récupération des KPIs:", error)
-      }
+    const formData = new FormData()
+    formData.append("name", projectName)
+    formData.append("capacity_file", rmFile as File)
+    formData.append("jira_file", jiraFile as File)
+    formData.append("teams_file", leavesFile as File)
+
+    try {
+      await axios.post("http://localhost:8000/projects", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+
+      // Re-initialisation du formulaire et fermeture de la modale
+      setProjectName("")
+      setRmFile(null)
+      setJiraFile(null)
+      setLeavesFile(null)
+      setOpen(false)
+    } catch (err: any) {
+      const apiError = err.response?.data?.detail || "Erreur lors de la création du projet."
+      setError(apiError)
+    } finally {
+      setLoading(false)
     }
-
-    if (projectId && moduleId) {
-      fetchKpis()
-    }
-  }, [projectId, moduleId])
-
-  const estimatedHours = capacity?.estimatedHours || 0
-  const consumedHours = capacity?.consumedHours || 0
-  const hoursOverrun = Math.max(0, consumedHours - estimatedHours)
-  const hoursOverrunPct = estimatedHours > 0 ? Math.round((hoursOverrun / estimatedHours) * 100) : 0
+  }
 
   return (
-    <main className="min-h-screen bg-gray-50/30 p-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
-      {/* Barre de Filtre */}
-      <div className="mb-6 flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          <RiFilter3Line className="size-4 shrink-0 text-gray-500" />
-          <span>Filtres :</span>
-        </div>
-        <div className="shadow-xs flex flex-wrap items-center gap-4 rounded-xl border border-gray-200/80 bg-white p-3 dark:border-gray-800 dark:bg-gray-900/60 dark:backdrop-blur">
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="team-select"
-              className="text-xs font-medium text-gray-500 dark:text-gray-400"
-            >
-              Département / Équipe :
-            </label>
-            <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-              <SelectTrigger className="w-[180px] dark:border-gray-800 dark:bg-gray-950">
-                <SelectValue placeholder="Toutes les équipes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Toutes les équipes</SelectItem>
-                {teams.map((team) => (
-                  <SelectItem key={team} value={team}>
-                    {team}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
+    <div className="flex justify-center">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger
+          className="flex justify-center rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+        >
+          <RiAddCircleLine className="size-5" />
+        </DialogTrigger>
 
-      {/* Grid structuré en 3 rangées */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        
-        {/* ROW 1: Capacité Planifiée */}
-        <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
-          <div>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Capacité Planifiée (RM)
-            </dt>
-            <dd className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
-              {capacity?.capacityRealHours ?? 0}h
-            </dd>
-          </div>
-          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-            Période : ce mois-ci (RM{" "}
-            <span className="font-mono font-medium" style={{ color: "#048890" }}>
-              Scheduled
-            </span>
-            )
-          </p>
-        </Card>
+        <DialogContent className="overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Créer un nouveau projet JIRA</DialogTitle>
+            <DialogDescription className="mt-1 text-sm leading-6">
+              Renseignez les informations du projet et déposez les fichiers
+              d'extraction requis.
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* ROW 1: Estimation Initiale */}
-        <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
-          <div>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Estimation initiale (Jira)
-            </dt>
-            <dd className="mt-2 text-3xl font-semibold tracking-tight" style={{ color: "#048890" }}>
-              {capacity?.estimatedHours ?? 0}h{" "}
-              <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-                estimées
-              </span>
-            </dd>
-          </div>
-          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-            Sur {backlogProgress?.totalTickets ?? 0} tickets importés
-          </p>
-        </Card>
-
-        {/* ROW 1 & 2: Taux d'Occupation Réel (Prend 2 Rows en hauteur) */}
-        <Card className="flex flex-col justify-between lg:row-span-2 dark:border-gray-800 dark:bg-gray-900/80">
-          <div>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Taux d'Occupation Réel
-            </dt>
-            <p className="mt-1 text-xs text-gray-400">
-              Consommation sur capacité planifiée.
-            </p>
-          </div>
-
-          <div className="my-auto flex flex-col items-center justify-center py-6 text-center">
-            <ProgressCircle
-              value={capacity?.occupancyRatePct ?? 0}
-              radius={65}
-              strokeWidth={8}
-            />
-            <dd className="mt-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
-              {capacity?.occupancyRatePct ?? 0}%
-            </dd>
-            <p className="mt-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              {capacity?.consumedHours ?? 0}h consommées / {capacity?.capacityRealHours ?? 0}h
-            </p>
-          </div>
-
-          {hoursOverrun > 0 && (
-            <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-3 dark:border-rose-900/30 dark:bg-rose-950/20">
-              <div className="flex items-center gap-2 text-xs font-medium text-rose-600 dark:text-rose-400">
-                <RiTimeLine className="size-4 shrink-0" />
-                <span>
-                  Dépassement de {hoursOverrun}h (+{hoursOverrunPct}%)
-                </span>
-              </div>
+          {error && (
+            <div className="mt-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
+              {error}
             </div>
           )}
-        </Card>
 
-        {/* ROW 2: Avancement des Tickets (Occupe 2 colonnes en Row 2) */}
-        <Card className="lg:col-span-2 dark:border-gray-800 dark:bg-gray-900/80">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Avancement du Backlog (Jira)
-            </p>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">
-              {backlogProgress?.ticketsDone ?? 0} / {backlogProgress?.totalTickets ?? 0} tickets
-            </span>
-          </div>
-
-          <CategoryBar
-            values={[
-              backlogProgress?.progressPct || 0,
-              100 - (backlogProgress?.progressPct || 0),
-            ]}
-            colors={["emerald", "gray"]}
-            showLabels={false}
-            className="mt-4"
-          />
-
-          <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-            <span>Progression globale</span>
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {backlogProgress?.progressPct ?? 0}% complet
-            </span>
-          </div>
-        </Card>
-
-        {/* ROW 3: Ventilation des Tickets (Prend toute la largeur de la rangée 3) */}
-        <Card className="lg:col-span-3 dark:border-gray-800 dark:bg-gray-900/80">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Ventilation des Tickets (Jira Issue Types)
-              </h2>
-              <p className="text-xs text-gray-400">Répartition du volume de travail par typologie</p>
+          <form className="mt-4 space-y-5" onSubmit={handleSubmit}>
+            <div className="flex flex-col gap-1.5 w-full">
+              <Label className="text-sm font-semibold text-gray-700">
+                Nom du projet *
+              </Label>
+              <Input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="ex: Bati"
+                required
+              />
             </div>
-          </div>
 
-          <CategoryBar
-            values={[
-              workDistribution?.featuresPct || 0,
-              workDistribution?.BugsPct || 0,
-              workDistribution?.MaintenancePct || 0,
-            ]}
-            colors={["cyan", "rose", "amber"]}
-            showLabels={false}
-            className="mt-4"
-          />
+            <div className="mt-4 border-t pt-4">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Dépôt des fichiers d'extraction
+              </label>
 
-          <div className="mt-4 grid grid-cols-3 gap-4 text-xs">
-            <div className="flex items-center gap-2">
-              <RiStackLine className="size-4 shrink-0" style={{ color: "#048890" }} />
-              <div>
-                <span className="font-semibold text-gray-900 dark:text-gray-50">
-                  {workDistribution?.featuresPct ?? 0}%
-                </span>
-                <p className="text-gray-500 dark:text-gray-400">Features / Stories</p>
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                <DropZone
+                  title="Export RM"
+                  description="Fichier d'export de RM"
+                  acceptText="CSV, XLSX jusqu'à 20MB"
+                  file={rmFile}
+                  onFileSelect={setRmFile}
+                />
+
+                <DropZone
+                  title="Export Jira"
+                  description="Fichier d'export de Jira"
+                  acceptText="CSV, XLSX jusqu'à 20MB"
+                  file={jiraFile}
+                  onFileSelect={setJiraFile}
+                />
+
+                <DropZone
+                  title="Export de la fiche de congés"
+                  description="Fichier d'export de la fiche de congés"
+                  acceptText="CSV, XLSX jusqu'à 20MB"
+                  file={leavesFile}
+                  onFileSelect={setLeavesFile}
+                />
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <RiBugLine className="size-4 shrink-0 text-rose-500 dark:text-rose-400" />
-              <div>
-                <span className="font-semibold text-gray-900 dark:text-gray-50">
-                  {workDistribution?.BugsPct ?? 0}%
-                </span>
-                <p className="text-gray-500 dark:text-gray-400">Bugs / Anomalies</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <RiCheckDoubleLine className="size-4 shrink-0 text-amber-500 dark:text-amber-400" />
-              <div>
-                <span className="font-semibold text-gray-900 dark:text-gray-50">
-                  {workDistribution?.MaintenancePct ?? 0}%
-                </span>
-                <p className="text-gray-500 dark:text-gray-400">Dette Technique / Tâches</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-      </div>
-    </main>
+            <DialogFooter className="mt-6">
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  className="mt-2 w-full sm:mt-0 sm:w-fit"
+                  variant="secondary"
+                  disabled={loading}
+                >
+                  Annuler
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                className="w-full bg-[#048890] hover:bg-[#036c73] sm:w-fit disabled:bg-[#048890]/30"
+                disabled={!isValid || loading}
+              >
+                {loading ? "Création en cours..." : "Créer le projet"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }
