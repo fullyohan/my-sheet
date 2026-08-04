@@ -1,264 +1,302 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useState } from "react"
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "@hello-pangea/dnd"
 import { Card } from "@/components/Card"
-import { ProgressCircle } from "@/components/ProgressCircle"
-import { CategoryBar } from "@/components/CategoryBar"
+import { RiDragMove2Line, RiRefreshLine, RiCheckLine } from "@remixicon/react"
 
-import {
-  RiTimeLine,
-  RiCheckDoubleLine,A
-  RiBugLine,
-  RiStackLine,
-  RiFilter3Line,
-} from "@remixicon/react"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/Select"
-import axios from "axios"
-import { useParams } from "next/navigation"
-
-interface Capacity {
-  capacityRealHours: number
-  estimatedHours: number
-  consumedHours: number
-  occupancyRatePct: number
+// Types pour l'état du Board
+interface StatusMappingState {
+  unassigned: string[]
+  targets: Record<string, string[]>
 }
 
-interface BacklogProgress {
-  totalTickets: number
-  ticketsDone: number
-  progressPct: number
+// Statuts Cibles (Colonnes de droite)
+const TARGET_STATUSES = [
+  "1_En écriture",
+  "2_Prêt",
+  "3_En développement",
+  "4_En test",
+  "5_En prod",
+  "0_Annulé",
+]
+
+// Données initiales extraites du tableau
+const INITIAL_DATA: StatusMappingState = {
+  unassigned: [],
+  targets: {
+    "1_En écriture": [
+      "Nouveau",
+      "Brouillon",
+      "A designer",
+      "En design",
+      "Review design",
+      "Relecture",
+      "Mature",
+      "A estimer",
+    ],
+    "2_Prêt": ["Prêt"],
+    "3_En développement": ["En cours"],
+    "4_En test": [
+      "Validation technique",
+      "A livrer dev",
+      "Validation fonctionnelle",
+      "Validation K.O.",
+      "A livrer int",
+      "Prêt pour deploiement int",
+      "A recetter INT",
+      "Test à automatiser",
+      "A livrer en prod",
+      "KO a livrer en prod",
+      "Restitution",
+      "PRET POUR DEPLOIEEMET",
+    ],
+    "5_En prod": [
+      "Livrée en prod",
+      "KO livrée en prod",
+      "Terminé",
+    ],
+    "0_Annulé": ["Annulé"],
+  },
 }
 
-interface WorkDistribution {
-  featuresPct: number
-  BugsPct: number
-  MaintenancePct: number
-}
+export default function StatusMappingBoard() {
+  const [boardData, setBoardData] = useState<StatusMappingState>(INITIAL_DATA)
 
-export default function AnalyticsDashboard() {
-  const [teams, setTeams] = useState<string[]>([])
-  const [selectedTeam, setSelectedTeam] = useState("ALL")
-  const [capacity, setCapacity] = useState<Capacity | null>(null)
-  const [backlogProgress, setBacklogProgress] = useState<BacklogProgress | null>(null)
-  const [workDistribution, setWorkDistribution] = useState<WorkDistribution | null>(null)
+  // Gestion du Drag and Drop
+  const onDragEnd = (result: DropResult) => {
+    const { source, destination } = result
 
-  const { projectId, moduleId } = useParams()
+    // Déposé hors d'un conteneur
+    if (!destination) return
 
-  useEffect(() => {
-    const fetchKpis = async () => {
-      try {
-        const resp = await axios.get(
-          `http://localhost:8000/api/v1/projects/${projectId}/${moduleId}/overview`
-        )
-        setTeams(resp.data.teams || [])
-        setCapacity(resp.data.capacity)
-        setBacklogProgress(resp.data.backlogProgress || null)
-        setWorkDistribution(resp.data.workDistribution || null)
-      } catch (error) {
-        console.error("Erreur lors de la récupération des KPIs:", error)
-      }
+    // Aucun changement de position
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
+      return
     }
 
-    if (projectId && moduleId) {
-      fetchKpis()
-    }
-  }, [projectId, moduleId])
+    const sourceId = source.droppableId
+    const destId = destination.droppableId
 
-  const estimatedHours = capacity?.estimatedHours || 0
-  const consumedHours = capacity?.consumedHours || 0
-  const hoursOverrun = consumedHours - estimatedHours
-  const hoursOverrunPct = estimatedHours > 0 ? Math.round((hoursOverrun / estimatedHours) * 100) : 0
+    // 1. Récupération de la liste source
+    const sourceList =
+      sourceId === "unassigned"
+        ? [...boardData.unassigned]
+        : [...boardData.targets[sourceId]]
+
+    // 2. Extraire l'élément déplacé
+    const [movedItem] = sourceList.splice(source.index, 1)
+
+    // 3. Récupération de la liste destination
+    const destList =
+      destId === "unassigned"
+        ? [...boardData.unassigned]
+        : [...(boardData.targets[destId] || [])]
+
+    // Si on déplace au sein de la même colonne
+    if (sourceId === destId) {
+      sourceList.splice(destination.index, 0, movedItem)
+      setBoardData((prev) => ({
+        ...prev,
+        [sourceId === "unassigned" ? "unassigned" : "targets"]:
+          sourceId === "unassigned"
+            ? sourceList
+            : { ...prev.targets, [sourceId]: sourceList },
+      }))
+      return
+    }
+
+    // Si on déplace vers une autre colonne
+    destList.splice(destination.index, 0, movedItem)
+
+    setBoardData((prev) => ({
+      unassigned:
+        sourceId === "unassigned"
+          ? sourceList
+          : destId === "unassigned"
+          ? destList
+          : prev.unassigned,
+      targets: {
+        ...prev.targets,
+        ...(sourceId !== "unassigned" && { [sourceId]: sourceList }),
+        ...(destId !== "unassigned" && { [destId]: destList }),
+      },
+    }))
+  }
+
+  // Réinitialisation
+  const handleReset = () => setBoardData(INITIAL_DATA)
+
+  // Exporter la configuration au format JSON (pour ton backend ou config)
+  const handleSave = () => {
+    const mappingResult: Record<string, string> = {}
+    Object.entries(boardData.targets).forEach(([target, items]) => {
+      items.forEach((item) => {
+        mappingResult[item] = target
+      })
+    })
+    console.log("Mapping généré :", mappingResult)
+    alert("Correspondance enregistrée ! (Regarde la console pour le JSON)")
+  }
 
   return (
-    <main className="min-h-screen bg-gray-50/30 p-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
-      <div className="mb-6 flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          <RiFilter3Line className="size-4 shrink-0 text-gray-500" />
-          <span>Filtres :</span>
+    <div className="w-full space-y-6">
+      {/* En-tête des actions */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-50">
+            Mapping des Statuts Jira
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Glissez-déposez les statuts bruts Jira dans leurs catégories cibles.
+          </p>
         </div>
-        <div className="shadow-xs flex flex-wrap items-center gap-4 rounded-xl border border-gray-200/80 bg-white p-3 dark:border-gray-800 dark:bg-gray-900/60 dark:backdrop-blur">
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="team-select"
-              className="text-xs font-medium text-gray-500 dark:text-gray-400"
-            >
-              Département / Équipe :
-            </label>
-            <Select value={selectedTeam} onValueChange={setSelectedTeam}>
-              <SelectTrigger className="w-[180px] dark:border-gray-800 dark:bg-gray-950">
-                <SelectValue placeholder="Toutes les équipes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Toutes les équipes</SelectItem>
-                {teams.map((team) => (
-                  <SelectItem key={team} value={team}>
-                    {team}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-xs hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            <RiRefreshLine className="size-4 shrink-0" />
+            Réinitialiser
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-1.5 rounded-lg bg-[#048890] px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:opacity-90"
+          >
+            <RiCheckLine className="size-4 shrink-0" />
+            Enregistrer le Mapping
+          </button>
         </div>
       </div>
 
-      
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
-          <div>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Capacité Planifiée (RM)
-            </dt>
-            <dd className="mt-2 text-3xl font-semibold tracking-tight text-gray-900 dark:text-gray-50">
-              {capacity?.capacityRealHours ?? 0}h
-            </dd>
-          </div>
-          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-            Période : ce mois-ci 
-          </p>
-        </Card>
-
-        <Card className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80">
-          <div>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Estimation initiale
-            </dt>
-            <dd className="mt-2 text-3xl font-semibold tracking-tight" style={{ color: "#048890" }}>
-              {capacity?.estimatedHours ?? 0}h{" "}
-              <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-                estimées
-              </span>
-            </dd>
-          </div>
-          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-            Sur {backlogProgress?.totalTickets ?? 0} tickets importés
-          </p>
-        </Card>
-
-        <Card className="flex flex-col justify-between lg:row-span-2 dark:border-gray-800 dark:bg-gray-900/80">
-          <div>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Taux d'Occupation Réel
-            </dt>
-            <p className="mt-1 text-xs text-gray-400">
-              Consommation sur capacité planifiée.
-            </p>
-          </div>
-
-          <div className="my-auto flex flex-col items-center justify-center py-6 text-center">
-            <ProgressCircle
-              value={capacity?.occupancyRatePct ?? 0}
-              radius={65}
-              strokeWidth={8}
-            />
-            <dd className="mt-4 text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
-              {capacity?.occupancyRatePct ?? 0}%
-            </dd>
-            <p className="mt-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-              {capacity?.consumedHours ?? 0}h consommées / {capacity?.capacityRealHours ?? 0}h
-            </p>
-          </div>
-
-          {hoursOverrun > 0 && (
-            <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-3 dark:border-rose-900/30 dark:bg-rose-950/20">
-              <div className="flex items-center gap-2 text-xs font-medium text-rose-600 dark:text-rose-400">
-                <RiTimeLine className="size-4 shrink-0" />
-                <span>
-                  Dépassement de {hoursOverrun}h (+{hoursOverrunPct}%)
-                </span>
-              </div>
-            </div>
-          )}
-        </Card>
-
-        <Card className="lg:col-span-2 dark:border-gray-800 dark:bg-gray-900/80">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Avancement du Backlog (Jira)
-            </p>
-            <span className="text-sm font-semibold text-gray-900 dark:text-gray-50">
-              {backlogProgress?.ticketsDone ?? 0} / {backlogProgress?.totalTickets ?? 0} tickets
-            </span>
-          </div>
-
-          <CategoryBar
-            values={[
-              backlogProgress?.progressPct || 0,
-              100 - (backlogProgress?.progressPct || 0),
-            ]}
-            colors={["emerald", "gray"]}
-            showLabels={false}
-            className="mt-4"
-          />
-
-          <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-            <span>Progression globale</span>
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {backlogProgress?.progressPct ?? 0}% complet
-            </span>
-          </div>
-        </Card>
-
-        <Card className="lg:col-span-3 dark:border-gray-800 dark:bg-gray-900/80">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Ventilation des Tickets (Jira Issue Types)
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+          
+          {/* COLONNE GAUCHE : Statuts Non Assignés / En réserve */}
+          <Card className="flex flex-col dark:border-gray-800 dark:bg-gray-900/80">
+            <div className="border-b border-gray-100 pb-3 dark:border-gray-800">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Statuts Non Assignés ({boardData.unassigned.length})
               </h2>
-              <p className="text-xs text-gray-400">Répartition du volume de travail par typologie</p>
             </div>
+
+            <Droppable droppableId="unassigned">
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className={`mt-3 flex-1 min-h-[300px] space-y-2 rounded-xl border border-dashed p-2 transition-colors ${
+                    snapshot.isDraggingOver
+                      ? "border-cyan-500 bg-cyan-50/20 dark:bg-cyan-950/10"
+                      : "border-gray-200 dark:border-gray-800"
+                  }`}
+                >
+                  {boardData.unassigned.length === 0 ? (
+                    <div className="flex h-full items-center justify-center p-4 text-center text-xs text-gray-400">
+                      Tous les statuts Jira sont actuellement mappés.
+                    </div>
+                  ) : (
+                    boardData.unassigned.map((status, index) => (
+                      <Draggable
+                        key={status}
+                        draggableId={status}
+                        index={index}
+                      >
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            className={`flex items-center justify-between rounded-lg border bg-white p-2.5 text-xs font-medium text-gray-700 shadow-xs transition-shadow dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 ${
+                              snapshot.isDragging
+                                ? "border-cyan-500 ring-2 ring-cyan-500/20 shadow-md"
+                                : "border-gray-200 hover:border-gray-300 dark:hover:border-gray-700"
+                            }`}
+                          >
+                            <span>{status}</span>
+                            <RiDragMove2Line className="size-4 text-gray-400 shrink-0" />
+                          </div>
+                        )}
+                      </Draggable>
+                    ))
+                  )}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </Card>
+
+          {/* COLONNE DROITE : Grille des Statuts Cibles */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3">
+            {TARGET_STATUSES.map((targetKey) => {
+              const items = boardData.targets[targetKey] || []
+              return (
+                <Card
+                  key={targetKey}
+                  className="flex flex-col justify-between dark:border-gray-800 dark:bg-gray-900/80"
+                >
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-2.5 dark:border-gray-800">
+                    <span className="font-mono text-xs font-bold text-gray-900 dark:text-gray-100">
+                      {targetKey}
+                    </span>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                      {items.length}
+                    </span>
+                  </div>
+
+                  <Droppable droppableId={targetKey}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        className={`mt-3 flex-1 min-h-[140px] space-y-2 rounded-xl border border-dashed p-2 transition-colors ${
+                          snapshot.isDraggingOver
+                            ? "border-[#048890] bg-cyan-50/30 dark:bg-cyan-950/20"
+                            : "border-gray-200/80 dark:border-gray-800"
+                        }`}
+                      >
+                        {items.map((status, index) => (
+                          <Draggable
+                            key={status}
+                            draggableId={status}
+                            index={index}
+                          >
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`flex items-center justify-between rounded-lg border bg-white p-2 text-xs font-medium text-gray-800 shadow-xs transition-shadow dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 ${
+                                  snapshot.isDragging
+                                    ? "border-[#048890] ring-2 ring-[#048890]/20 shadow-md"
+                                    : "border-gray-200/90 hover:border-gray-300 dark:hover:border-gray-700"
+                                }`}
+                              >
+                                <span>{status}</span>
+                                <RiDragMove2Line className="size-3.5 text-gray-400 shrink-0" />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                </Card>
+              )
+            })}
           </div>
 
-          <CategoryBar
-            values={[
-              workDistribution?.featuresPct || 0,
-              workDistribution?.BugsPct || 0,
-              workDistribution?.MaintenancePct || 0,
-            ]}
-            colors={["cyan", "red", "amber"]}
-            showLabels={false}
-            className="mt-4"
-          />
-
-          <div className="mt-4 grid grid-cols-3 gap-4 text-xs">
-            <div className="flex items-center gap-2">
-              <RiStackLine className="size-4 shrink-0" style={{ color: "#048890" }} />
-              <div>
-                <span className="font-semibold text-gray-900 dark:text-gray-50">
-                  {workDistribution?.featuresPct ?? 0}%
-                </span>
-                <p className="text-gray-500 dark:text-gray-400">Features / Stories</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <RiBugLine className="size-4 shrink-0 text-rose-500 dark:text-rose-400" />
-              <div>
-                <span className="font-semibold text-gray-900 dark:text-gray-50">
-                  {workDistribution?.BugsPct ?? 0}%
-                </span>
-                <p className="text-gray-500 dark:text-gray-400">Bugs / Anomalies</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <RiCheckDoubleLine className="size-4 shrink-0 text-amber-500 dark:text-amber-400" />
-              <div>
-                <span className="font-semibold text-gray-900 dark:text-gray-50">
-                  {workDistribution?.MaintenancePct ?? 0}%
-                </span>
-                <p className="text-gray-500 dark:text-gray-400">Dette Technique / Tâches</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-      </div>
-    </main>
+        </div>
+      </DragDropContext>
+    </div>
   )
 }
