@@ -74,15 +74,14 @@ export default function CreateProjectWizard() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Récupération du nom du projet et du nombre de modules (depuis l'URL ou le Modal)
+  const projectName = searchParams.get("projectName") || searchParams.get("name") || ""
   const modulesParam = searchParams.get("modules") || searchParams.get("modulesCount")
   const initialModulesCount = Math.max(1, parseInt(modulesParam || "1", 10))
 
   const [currentStep, setCurrentStep] = useState(1)
 
-  // 1. INFO GLOBALE UNIQUE : Le nom global du projet
-  const [projectName, setProjectName] = useState("")
-
-  // 2. DONNÉES SPÉCIFIQUES ET ISOLÉES PAR MODULE
+  // STATE DES MODULES (Nom dynamique éditable dans Infos Module)
   const [modules, setModules] = useState<ModuleConfig[]>(() =>
     Array.from({ length: initialModulesCount }, (_, i) => ({
       id: `mod-${i + 1}`,
@@ -101,7 +100,7 @@ export default function CreateProjectWizard() {
   )
   const [activeModuleId, setActiveModuleId] = useState<string>("mod-1")
 
-  // Synchro en cas d'update du paramètre URL
+  // Resynchronisation si les params URL changent
   useEffect(() => {
     if (initialModulesCount !== modules.length) {
       setModules(
@@ -127,6 +126,7 @@ export default function CreateProjectWizard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Mise à jour du module actif
   const updateActiveModule = (fields: Partial<ModuleConfig>) => {
     setModules((prev) =>
       prev.map((mod) =>
@@ -135,22 +135,14 @@ export default function CreateProjectWizard() {
     )
   }
 
-  const updateModuleById = (id: string, fields: Partial<ModuleConfig>) => {
-    setModules((prev) =>
-      prev.map((mod) => (mod.id === id ? { ...mod, ...fields } : mod))
-    )
-  }
-
   const activeModule =
     modules.find((m) => m.id === activeModuleId) || modules[0]
 
-  // VALIDATIONS PAR ÉTAPE
-  const areModuleNamesValid = useMemo(() => {
-    return modules.every((m) => m.name.trim() !== "")
-  }, [modules])
-
+  // VALIDATIONS
   const areModuleInfosValid = useMemo(() => {
-    return modules.every((m) => Number(m.sp) > 0 && Number(m.budget) > 0)
+    return modules.every(
+      (m) => m.name.trim() !== "" && Number(m.sp) > 0 && Number(m.budget) > 0
+    )
   }, [modules])
 
   const areModulePlanningsValid = useMemo(() => {
@@ -172,48 +164,36 @@ export default function CreateProjectWizard() {
     () => [
       {
         step: 1,
-        label: "Initialisation",
-        icon: RiInformationLine,
-        valid: projectName.trim() !== "" && areModuleNamesValid,
-      },
-      {
-        step: 2,
         label: "Infos Module",
         icon: RiInformationLine,
         valid: areModuleInfosValid,
       },
       {
-        step: 3,
+        step: 2,
         label: "Planning",
         icon: RiCalendarEventLine,
         valid: areModulePlanningsValid,
       },
       {
-        step: 4,
+        step: 3,
         label: "Rôles & Taux",
         icon: RiUserStarLine,
         valid: true,
       },
       {
-        step: 5,
+        step: 4,
         label: "Import d'extract",
         icon: RiFileUploadLine,
         valid: areAllModulesImportValid,
       },
       {
-        step: 6,
+        step: 5,
         label: "Mapping Tickets",
         icon: RiFileUploadLine,
         valid: true,
       },
     ],
-    [
-      projectName,
-      areModuleNamesValid,
-      areModuleInfosValid,
-      areModulePlanningsValid,
-      areAllModulesImportValid,
-    ]
+    [areModuleInfosValid, areModulePlanningsValid, areAllModulesImportValid]
   )
 
   const handleNext = () => {
@@ -230,11 +210,8 @@ export default function CreateProjectWizard() {
     setError(null)
 
     const formData = new FormData()
-    
-    // Nom global
     formData.append("name", projectName)
 
-    // Métadonnées complètes par module (Chaque module a ses SP, son budget, ses dates)
     const modulesPayload = modules.map((m) => ({
       id: m.id,
       name: m.name,
@@ -248,7 +225,6 @@ export default function CreateProjectWizard() {
     }))
     formData.append("modules_metadata", JSON.stringify(modulesPayload))
 
-    // Fichiers par module
     modules.forEach((mod, idx) => {
       if (mod.rmFile) formData.append(`module_${idx}_capacity_file`, mod.rmFile)
       if (mod.jiraFile) formData.append(`module_${idx}_jira_file`, mod.jiraFile)
@@ -288,7 +264,7 @@ export default function CreateProjectWizard() {
             <RiArrowLeftLine className="size-4" /> Annuler
           </button>
           <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-            Création de Projet Multi-Modules
+            {projectName ? `Configuration : ${projectName}` : "Création de Projet"}
           </span>
           <div className="w-16" />
         </div>
@@ -335,62 +311,8 @@ export default function CreateProjectWizard() {
         )}
 
         <Card className="p-6">
-          {/* ÉTAPE 1: INITIALISATION GLOBAL & MODULES */}
-          {currentStep === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                  Initialisation du Projet
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Indiquez le nom général de votre projet et nommez chacun de vos modules.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-1.5 max-w-md">
-                <Label className="text-xs font-semibold">
-                  Nom général du projet *
-                </Label>
-                <Input
-                  type="text"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="ex: Batica E-Commerce"
-                  autoFocus
-                />
-              </div>
-
-              <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Définition des modules ({modules.length})
-                </h3>
-                <p className="mb-3 text-xs text-gray-400">
-                  Définissez les noms des modules qui seront configurés dans les étapes suivantes.
-                </p>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-                  {modules.map((mod, index) => (
-                    <div key={mod.id} className="flex flex-col gap-1.5">
-                      <Label className="text-xs text-gray-600 dark:text-gray-400">
-                        Module #{index + 1}
-                      </Label>
-                      <Input
-                        type="text"
-                        value={mod.name}
-                        onChange={(e) =>
-                          updateModuleById(mod.id, { name: e.target.value })
-                        }
-                        placeholder={`ex: Module ${index + 1}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* BARRE D'ONGLETS MODULES (Visible à partir de l'étape 2 pour tout paramétrer par module) */}
-          {currentStep >= 2 && modules.length > 1 && (
+          {/* BARRE D'ONGLETS MODULES */}
+          {modules.length > 1 && (
             <div className="mb-6 border-b border-gray-200 dark:border-gray-800">
               <nav className="-mb-px flex space-x-4 overflow-x-auto">
                 {modules.map((mod) => {
@@ -407,7 +329,7 @@ export default function CreateProjectWizard() {
                       }`}
                     >
                       <RiStackLine className="size-4" />
-                      {mod.name || `Module ${mod.id}`}
+                      {mod.name.trim() || `Module ${mod.id}`}
                     </button>
                   )
                 })}
@@ -415,19 +337,35 @@ export default function CreateProjectWizard() {
             </div>
           )}
 
-          {/* ÉTAPE 2: INFOS SPÉCIFIQUES (PAR MODULE) */}
-          {currentStep === 2 && (
+          {/* ÉTAPE 1: INFOS MODULE & MODIFICATION DU NOM */}
+          {currentStep === 1 && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                  Périmètre & Budget : <span className="text-[#048890]">{activeModule.name}</span>
+                  Informations : <span className="text-[#048890]">{activeModule.name || "Module"}</span>
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Définissez la charge en Story Points et le budget pour ce module.
+                  Renommez le module et définissez ses métriques globales.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
+                {/* MODIFICATION EN TEMPS RÉEL DU NOM DU MODULE */}
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">
+                    Nom du module *
+                  </Label>
+                  <Input
+                    type="text"
+                    value={activeModule.name}
+                    onChange={(e) =>
+                      updateActiveModule({ name: e.target.value })
+                    }
+                    placeholder="ex: Web / Backend / Mobile"
+                    autoFocus
+                  />
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs font-semibold">
                     Chiffrage (Story Points) *
@@ -457,8 +395,8 @@ export default function CreateProjectWizard() {
             </div>
           )}
 
-          {/* ÉTAPE 3: PLANNING (PAR MODULE) */}
-          {currentStep === 3 && (
+          {/* ÉTAPE 2: PLANNING (PAR MODULE) */}
+          {currentStep === 2 && (
             <div className="space-y-4">
               <div>
                 <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
@@ -506,8 +444,8 @@ export default function CreateProjectWizard() {
             </div>
           )}
 
-          {/* ÉTAPE 4: RÔLES & TAUX (PAR MODULE) */}
-          {currentStep === 4 && (
+          {/* ÉTAPE 3: RÔLES & TAUX (PAR MODULE) */}
+          {currentStep === 3 && (
             <div className="space-y-4">
               <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 Rôles & Taux : <span className="text-[#048890]">{activeModule.name}</span>
@@ -521,8 +459,8 @@ export default function CreateProjectWizard() {
             </div>
           )}
 
-          {/* ÉTAPE 5: IMPORTS (PAR MODULE) */}
-          {currentStep === 5 && (
+          {/* ÉTAPE 4: IMPORTS (PAR MODULE) */}
+          {currentStep === 4 && (
             <div className="space-y-4">
               <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 Fichiers & Extracts : <span className="text-[#048890]">{activeModule.name}</span>
@@ -538,8 +476,8 @@ export default function CreateProjectWizard() {
             </div>
           )}
 
-          {/* ÉTAPE 6: MAPPING TICKETS (PAR MODULE) */}
-          {currentStep === 6 && (
+          {/* ÉTAPE 5: MAPPING TICKETS (PAR MODULE) */}
+          {currentStep === 5 && (
             <div className="space-y-4">
               <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 Mapping Tickets : <span className="text-[#048890]">{activeModule.name}</span>
