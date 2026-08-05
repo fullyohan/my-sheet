@@ -13,13 +13,14 @@ import {
   RiFileUploadLine,
   RiInformationLine,
   RiStackLine,
+  RiUserStarLine,
 } from "@remixicon/react"
 import axios from "axios"
 import { useRouter, useSearchParams } from "next/navigation"
 import React, { useEffect, useMemo, useState } from "react"
 
 import ImportSection from "../_components/ImportSection"
-import RoleRateSection from "../_components/RoleRateSection"
+import RoleRateSection, { RoleRateItem } from "../_components/RoleRateSection"
 import StatusMappingSection from "../_components/StatusMappingSection"
 
 const INITIAL_MAPPING: Record<string, string[]> = {
@@ -57,54 +58,66 @@ const INITIAL_MAPPING: Record<string, string[]> = {
 export interface ModuleConfig {
   id: string
   name: string
+  sp: string
+  budget: string
+  startDate: Date | undefined
+  mvpEndDate: Date | undefined
+  crEndDate: Date | undefined
   rmFile: File | null
   jiraFile: File | null
   leavesFile: File | null
   mappingItems: Record<string, string[]>
+  roles: RoleRateItem[]
 }
 
 export default function CreateProjectWizard() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Récupération du nombre de modules depuis l'URL (ex: ?modules=3 ou ?modulesCount=3, par défaut 1)
   const modulesParam = searchParams.get("modules") || searchParams.get("modulesCount")
   const initialModulesCount = Math.max(1, parseInt(modulesParam || "1", 10))
 
-  const [currentStep, setCurrentStep] = useState(4)
+  const [currentStep, setCurrentStep] = useState(1)
 
+  // 1. INFO GLOBALE UNIQUE : Le nom global du projet
   const [projectName, setProjectName] = useState("")
-  const [totalProjectSp, setTotalProjectSp] = useState<string>("")
-  const [allocatedBudget, setAllocatedBudget] = useState<string>("")
 
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined)
-  const [mvpEndDate, setMvpEndDate] = useState<Date | undefined>(undefined)
-  const [crEndDate, setCrEndDate] = useState<Date | undefined>(undefined)
-
-  // Initialisation des modules selon le paramètre URL
+  // 2. DONNÉES SPÉCIFIQUES ET ISOLÉES PAR MODULE
   const [modules, setModules] = useState<ModuleConfig[]>(() =>
     Array.from({ length: initialModulesCount }, (_, i) => ({
       id: `mod-${i + 1}`,
       name: `Module ${i + 1}`,
+      sp: "",
+      budget: "",
+      startDate: undefined,
+      mvpEndDate: undefined,
+      crEndDate: undefined,
       rmFile: null,
       jiraFile: null,
       leavesFile: null,
       mappingItems: INITIAL_MAPPING,
+      roles: [],
     }))
   )
   const [activeModuleId, setActiveModuleId] = useState<string>("mod-1")
 
-  // Synchronisation au cas où le paramètre d'URL change dynamiquement
+  // Synchro en cas d'update du paramètre URL
   useEffect(() => {
     if (initialModulesCount !== modules.length) {
       setModules(
         Array.from({ length: initialModulesCount }, (_, i) => ({
           id: `mod-${i + 1}`,
           name: `Module ${i + 1}`,
+          sp: "",
+          budget: "",
+          startDate: undefined,
+          mvpEndDate: undefined,
+          crEndDate: undefined,
           rmFile: null,
           jiraFile: null,
           leavesFile: null,
           mappingItems: INITIAL_MAPPING,
+          roles: [],
         }))
       )
       setActiveModuleId("mod-1")
@@ -122,10 +135,35 @@ export default function CreateProjectWizard() {
     )
   }
 
+  const updateModuleById = (id: string, fields: Partial<ModuleConfig>) => {
+    setModules((prev) =>
+      prev.map((mod) => (mod.id === id ? { ...mod, ...fields } : mod))
+    )
+  }
+
   const activeModule =
     modules.find((m) => m.id === activeModuleId) || modules[0]
 
-  // Validation : Tous les modules doivent avoir leurs fichiers chargés à l'étape 3
+  // VALIDATIONS PAR ÉTAPE
+  const areModuleNamesValid = useMemo(() => {
+    return modules.every((m) => m.name.trim() !== "")
+  }, [modules])
+
+  const areModuleInfosValid = useMemo(() => {
+    return modules.every((m) => Number(m.sp) > 0 && Number(m.budget) > 0)
+  }, [modules])
+
+  const areModulePlanningsValid = useMemo(() => {
+    return modules.every(
+      (m) =>
+        Boolean(m.startDate && m.mvpEndDate && m.mvpEndDate > m.startDate) &&
+        (m.crEndDate
+          ? m.crEndDate > (m.startDate as Date) &&
+            m.crEndDate > (m.mvpEndDate as Date)
+          : true)
+    )
+  }, [modules])
+
   const areAllModulesImportValid = useMemo(() => {
     return modules.every((m) => Boolean(m.rmFile && m.jiraFile && m.leavesFile))
   }, [modules])
@@ -134,56 +172,53 @@ export default function CreateProjectWizard() {
     () => [
       {
         step: 1,
-        label: "Informations",
+        label: "Initialisation",
         icon: RiInformationLine,
-        valid: projectName.trim() !== "" && Number(totalProjectSp) > 0,
+        valid: projectName.trim() !== "" && areModuleNamesValid,
       },
       {
         step: 2,
-        label: "Planning",
-        icon: RiCalendarEventLine,
-        valid:
-          Boolean(startDate && mvpEndDate && mvpEndDate > startDate) &&
-          (crEndDate
-            ? crEndDate > (startDate as Date) &&
-              crEndDate > (mvpEndDate as Date)
-            : true),
+        label: "Infos Module",
+        icon: RiInformationLine,
+        valid: areModuleInfosValid,
       },
       {
         step: 3,
+        label: "Planning",
+        icon: RiCalendarEventLine,
+        valid: areModulePlanningsValid,
+      },
+      {
+        step: 4,
+        label: "Rôles & Taux",
+        icon: RiUserStarLine,
+        valid: true,
+      },
+      {
+        step: 5,
         label: "Import d'extract",
         icon: RiFileUploadLine,
         valid: areAllModulesImportValid,
       },
       {
-        step: 4,
+        step: 6,
         label: "Mapping Tickets",
         icon: RiFileUploadLine,
         valid: true,
       },
     ],
     [
-      crEndDate,
-      mvpEndDate,
       projectName,
-      startDate,
-      totalProjectSp,
+      areModuleNamesValid,
+      areModuleInfosValid,
+      areModulePlanningsValid,
       areAllModulesImportValid,
-    ],
+    ]
   )
 
   const handleNext = () => {
     if (currentStep < steps.length) setCurrentStep((prev) => prev + 1)
   }
-
-  const [roles, setRoles] = useState([
-    {
-      id: "1",
-      roleName: "Dev Senior",
-      dailyRate: 800,
-      assigneeName: "Yohan Konan",
-    },
-  ])
 
   const handlePrev = () => {
     if (currentStep > 1) setCurrentStep((prev) => prev - 1)
@@ -193,32 +228,27 @@ export default function CreateProjectWizard() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
     const formData = new FormData()
+    
+    // Nom global
     formData.append("name", projectName)
-    formData.append("total_project_sp", totalProjectSp)
-    formData.append("allocated_budget", allocatedBudget)
 
-    formData.append(
-      "start_date",
-      (startDate as Date).toISOString().split("T")[0],
-    )
-    formData.append(
-      "mvp_end_date",
-      (mvpEndDate as Date).toISOString().split("T")[0],
-    )
-    if (crEndDate) {
-      formData.append("cr_end_date", crEndDate.toISOString().split("T")[0])
-    }
-
-    // Payload multi-modules
+    // Métadonnées complètes par module (Chaque module a ses SP, son budget, ses dates)
     const modulesPayload = modules.map((m) => ({
       id: m.id,
       name: m.name,
+      total_sp: m.sp,
+      allocated_budget: m.budget,
+      start_date: m.startDate ? m.startDate.toISOString().split("T")[0] : null,
+      mvp_end_date: m.mvpEndDate ? m.mvpEndDate.toISOString().split("T")[0] : null,
+      cr_end_date: m.crEndDate ? m.crEndDate.toISOString().split("T")[0] : null,
       status_mapping: m.mappingItems,
+      roles: m.roles,
     }))
     formData.append("modules_metadata", JSON.stringify(modulesPayload))
 
-    // Fichiers organisés par module
+    // Fichiers par module
     modules.forEach((mod, idx) => {
       if (mod.rmFile) formData.append(`module_${idx}_capacity_file`, mod.rmFile)
       if (mod.jiraFile) formData.append(`module_${idx}_jira_file`, mod.jiraFile)
@@ -231,11 +261,11 @@ export default function CreateProjectWizard() {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        },
+        }
       )
       const projectMetadata = resp.data.projectMetadata
       router.push(
-        `/projects/${projectMetadata.id}/${projectMetadata.modules[0].id}/overview`,
+        `/projects/${projectMetadata.id}/${projectMetadata.modules[0].id}/overview`
       )
     } catch (err: any) {
       console.error(err.message)
@@ -258,13 +288,14 @@ export default function CreateProjectWizard() {
             <RiArrowLeftLine className="size-4" /> Annuler
           </button>
           <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-            Création de Projet
+            Création de Projet Multi-Modules
           </span>
           <div className="w-16" />
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8">
+        {/* WIZARD STEPS */}
         <div className="mb-8 flex items-center justify-between">
           {steps.map((item) => {
             const isActive = currentStep === item.step
@@ -304,110 +335,62 @@ export default function CreateProjectWizard() {
         )}
 
         <Card className="p-6">
+          {/* ÉTAPE 1: INITIALISATION GLOBAL & MODULES */}
           {currentStep === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
                 <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                  Généralités du projet
+                  Initialisation du Projet
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Nommez votre projet et définissez son périmètre SP.
+                  Indiquez le nom général de votre projet et nommez chacun de vos modules.
                 </p>
               </div>
 
-              <div className="space-y-4 pt-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">
-                    Nom du projet *
-                  </Label>
-                  <Input
-                    type="text"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    placeholder="ex: Batica"
-                    autoFocus
-                  />
-                </div>
+              <div className="flex flex-col gap-1.5 max-w-md">
+                <Label className="text-xs font-semibold">
+                  Nom général du projet *
+                </Label>
+                <Input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="ex: Batica E-Commerce"
+                  autoFocus
+                />
+              </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">
-                    Macro-chiffrage (Story Points) *
-                  </Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={totalProjectSp}
-                    onChange={(e) => setTotalProjectSp(e.target.value)}
-                    placeholder="ex: 250"
-                  />
-                </div>
+              <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                  Définition des modules ({modules.length})
+                </h3>
+                <p className="mb-3 text-xs text-gray-400">
+                  Définissez les noms des modules qui seront configurés dans les étapes suivantes.
+                </p>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">
-                    Budget alloué *
-                  </Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={allocatedBudget}
-                    onChange={(e) => setAllocatedBudget(e.target.value)}
-                    placeholder="ex: 250"
-                  />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+                  {modules.map((mod, index) => (
+                    <div key={mod.id} className="flex flex-col gap-1.5">
+                      <Label className="text-xs text-gray-600 dark:text-gray-400">
+                        Module #{index + 1}
+                      </Label>
+                      <Input
+                        type="text"
+                        value={mod.name}
+                        onChange={(e) =>
+                          updateModuleById(mod.id, { name: e.target.value })
+                        }
+                        placeholder={`ex: Module ${index + 1}`}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           )}
 
-          {currentStep === 2 && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                  Planning prévisionnel
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Définissez les dates clés du projet.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold">
-                    Début du projet *
-                  </Label>
-                  <DatePicker
-                    value={startDate}
-                    onChange={setStartDate}
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold text-amber-600">
-                    Fin prévue (MVP) *
-                  </Label>
-                  <DatePicker
-                    value={mvpEndDate}
-                    onChange={setMvpEndDate}
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs font-semibold text-emerald-600">
-                    Fin estimée (CR)
-                  </Label>
-                  <DatePicker
-                    value={crEndDate}
-                    onChange={setCrEndDate}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* BARRE D'ONGLETS DE NAVIGATION PAR MODULE (Visible si plus de 1 module dans l'URL) */}
-          {(currentStep === 3 || currentStep === 4) && modules.length > 1 && (
+          {/* BARRE D'ONGLETS MODULES (Visible à partir de l'étape 2 pour tout paramétrer par module) */}
+          {currentStep >= 2 && modules.length > 1 && (
             <div className="mb-6 border-b border-gray-200 dark:border-gray-800">
               <nav className="-mb-px flex space-x-4 overflow-x-auto">
                 {modules.map((mod) => {
@@ -424,7 +407,7 @@ export default function CreateProjectWizard() {
                       }`}
                     >
                       <RiStackLine className="size-4" />
-                      {mod.name}
+                      {mod.name || `Module ${mod.id}`}
                     </button>
                   )
                 })}
@@ -432,30 +415,145 @@ export default function CreateProjectWizard() {
             </div>
           )}
 
+          {/* ÉTAPE 2: INFOS SPÉCIFIQUES (PAR MODULE) */}
+          {currentStep === 2 && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  Périmètre & Budget : <span className="text-[#048890]">{activeModule.name}</span>
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Définissez la charge en Story Points et le budget pour ce module.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">
+                    Chiffrage (Story Points) *
+                  </Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={activeModule.sp}
+                    onChange={(e) => updateActiveModule({ sp: e.target.value })}
+                    placeholder="ex: 120"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">
+                    Budget alloué (€) *
+                  </Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={activeModule.budget}
+                    onChange={(e) => updateActiveModule({ budget: e.target.value })}
+                    placeholder="ex: 25000"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ÉTAPE 3: PLANNING (PAR MODULE) */}
           {currentStep === 3 && (
-            <ImportSection
-              rmFile={activeModule.rmFile}
-              jiraFile={activeModule.jiraFile}
-              leavesFile={activeModule.leavesFile}
-              setRmFile={(file) => updateActiveModule({ rmFile: file })}
-              setJiraFile={(file) => updateActiveModule({ jiraFile: file })}
-              setLeavesFile={(file) => updateActiveModule({ leavesFile: file })}
-            />
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  Planning : <span className="text-[#048890]">{activeModule.name}</span>
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Définissez le calendrier spécifique à ce module.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold">
+                    Début du module *
+                  </Label>
+                  <DatePicker
+                    value={activeModule.startDate}
+                    onChange={(d) => updateActiveModule({ startDate: d })}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold text-amber-600">
+                    Fin prévue (MVP) *
+                  </Label>
+                  <DatePicker
+                    value={activeModule.mvpEndDate}
+                    onChange={(d) => updateActiveModule({ mvpEndDate: d })}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold text-emerald-600">
+                    Fin estimée (CR)
+                  </Label>
+                  <DatePicker
+                    value={activeModule.crEndDate}
+                    onChange={(d) => updateActiveModule({ crEndDate: d })}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
           )}
 
+          {/* ÉTAPE 4: RÔLES & TAUX (PAR MODULE) */}
           {currentStep === 4 && (
-            <StatusMappingSection
-              mapping={activeModule.mappingItems}
-              onChange={(newMapping) =>
-                updateActiveModule({ mappingItems: newMapping })
-              }
-            />
+            <div className="space-y-4">
+              <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                Rôles & Taux : <span className="text-[#048890]">{activeModule.name}</span>
+              </h2>
+              <RoleRateSection
+                items={activeModule.roles}
+                onChange={(newRoles) =>
+                  updateActiveModule({ roles: newRoles })
+                }
+              />
+            </div>
           )}
 
+          {/* ÉTAPE 5: IMPORTS (PAR MODULE) */}
           {currentStep === 5 && (
-            <RoleRateSection items={roles} onChange={setRoles} />
+            <div className="space-y-4">
+              <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                Fichiers & Extracts : <span className="text-[#048890]">{activeModule.name}</span>
+              </h2>
+              <ImportSection
+                rmFile={activeModule.rmFile}
+                jiraFile={activeModule.jiraFile}
+                leavesFile={activeModule.leavesFile}
+                setRmFile={(file) => updateActiveModule({ rmFile: file })}
+                setJiraFile={(file) => updateActiveModule({ jiraFile: file })}
+                setLeavesFile={(file) => updateActiveModule({ leavesFile: file })}
+              />
+            </div>
           )}
 
+          {/* ÉTAPE 6: MAPPING TICKETS (PAR MODULE) */}
+          {currentStep === 6 && (
+            <div className="space-y-4">
+              <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                Mapping Tickets : <span className="text-[#048890]">{activeModule.name}</span>
+              </h2>
+              <StatusMappingSection
+                mapping={activeModule.mappingItems}
+                onChange={(newMapping) =>
+                  updateActiveModule({ mappingItems: newMapping })
+                }
+              />
+            </div>
+          )}
+
+          {/* FOOTER ACTIONS */}
           <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-4 dark:border-gray-800">
             {currentStep > 1 ? (
               <Button
