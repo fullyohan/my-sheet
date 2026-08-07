@@ -33,6 +33,12 @@ export const chartColors = {
     fill: "fill-gray-500",
     text: "text-gray-500",
   },
+  lightGray: {
+    bg: "bg-gray-400 dark:bg-gray-600",
+    stroke: "stroke-gray-400 dark:stroke-gray-600",
+    fill: "fill-gray-400 dark:fill-gray-600",
+    text: "text-gray-400 dark:text-gray-600",
+  },
   cyan: {
     bg: "bg-cyan-500",
     stroke: "stroke-cyan-500",
@@ -57,22 +63,26 @@ export const chartColors = {
     fill: "fill-fuchsia-500",
     text: "text-fuchsia-500",
   },
+  red: {
+    bg: "bg-red-500",
+    stroke: "stroke-red-500",
+    fill: "fill-red-500",
+    text: "text-red-500",
+  },
 } as const satisfies {
   [color: string]: {
     [key in ColorUtility]: string
   }
 }
 
-export type KnownChartColorKeys = keyof typeof chartColors
+// Permet de garder l'autocomplétion des couleurs par défaut ("blue", etc.) tout en acceptant n'importe quel Hexa ("#048890" ou "048890")
+export type AvailableChartColorsKeys =
+  | keyof typeof chartColors
+  | (string & {})
 
-/**
- * Accepte les clés chartColors par défaut ("blue", "emerald"...) OU une chaîne Hexa ("#048890", "#fff"...)
- */
-export type AvailableChartColorsKeys = KnownChartColorKeys | `#${string}`
-
-export const AvailableChartColors: KnownChartColorKeys[] = Object.keys(
+export const AvailableChartColors: AvailableChartColorsKeys[] = Object.keys(
   chartColors,
-) as Array<KnownChartColorKeys>
+) as Array<AvailableChartColorsKeys>
 
 export const constructCategoryColors = (
   categories: string[],
@@ -83,13 +93,6 @@ export const constructCategoryColors = (
     categoryColors.set(category, colors[index % colors.length])
   })
   return categoryColors
-}
-
-/**
- * Vérifie si la chaîne est un code hexadécimal valide (#RGB ou #RRGGBB)
- */
-export const isHexColor = (color: string): boolean => {
-  return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)
 }
 
 export const getColorClassName = (
@@ -103,14 +106,15 @@ export const getColorClassName = (
     text: "text-gray-500",
   }
 
-  // 1. Si la couleur est une clé connue dans chartColors
+  // 1. Si c'est une couleur prédéfinie dans l'objet chartColors
   if (color in chartColors) {
-    return chartColors[color as KnownChartColorKeys]?.[type] ?? fallbackColor[type]
+    return chartColors[color as keyof typeof chartColors]?.[type] ?? fallbackColor[type]
   }
 
-  // 2. Si c'est un code Hexa, génère la classe Tailwind arbitraire (ex: bg-[#048890])
-  if (isHexColor(color)) {
-    return `${type}-[${color}]`
+  // 2. Si c'est un code Hexadécimal (avec ou sans '#')
+  if (typeof color === "string" && (color.startsWith("#") || /^[0-9A-Fa-f]{3,8}$/.test(color))) {
+    const hex = color.startsWith("#") ? color : `#${color}`
+    return `${type}-[${hex}]`
   }
 
   return fallbackColor[type]
