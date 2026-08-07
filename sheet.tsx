@@ -1,280 +1,403 @@
 "use client"
 
-import React, { useState } from "react"
-import { useRouter } from "next/navigation"
-import { useSetup } from "../layout"
-import { Button } from "@/components/Button"
-import { RiArrowLeftLine, RiArrowRightLine, RiDragMove2Line } from "@remixicon/react"
-import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragStartEvent,
-  DragOverEvent,
-  DragEndEvent,
-  useDroppable,
-} from "@dnd-kit/core"
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+import React, { useMemo } from "react"
+import { useSetup } from "@/context/SetupContext"
+import { Input } from "@/components/Input"
+import { RiShieldCheckLine, RiAddLine, RiDeleteBinLine } from "@remixicon/react"
 
-export const TARGET_STATUSES = [
-  "En écriture",
-  "Prêt",
-  "En développement",
-  "En test",
-  "En prod",
-  "Annulé",
-]
+export interface TestRunItem {
+  id: string
+  date: string
+  nbTest: string
+  nbOk: string
+  nbKoBloquant: string
+  nbKoMajeur: string
+  nbKoMineur: string
+}
 
-export default function Step5Page() {
-  const router = useRouter()
-  const { activeModule, updateActiveModule, loading } = useSetup()
-  const [activeId, setActiveId] = useState<string | null>(null)
+export interface TechnicalMetrics {
+  securityHotspots: string
+  coverage: string
+  duplicatedLines: string
+  maintainabilityRating: "A" | "B" | "C" | "D" | "E"
+  reliabilityRating: "A" | "B" | "C" | "D" | "E"
+  securityRating: "A" | "B" | "C" | "D" | "E"
+}
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+export interface QualityAndTestingData {
+  testRuns: TestRunItem[]
+  metrics: TechnicalMetrics
+}
+
+export default function QualityStepPage() {
+  const { state, updateSectionData, currentModuleId } = useSetup()
+
+  // Structure par défaut si aucune donnée n'existe encore
+  const defaultData: QualityAndTestingData = useMemo(
+    () => ({
+      testRuns: [
+        {
+          id: "1",
+          date: new Date().toISOString().split("T")[0],
+          nbTest: "0",
+          nbOk: "0",
+          nbKoBloquant: "0",
+          nbKoMajeur: "0",
+          nbKoMineur: "0",
+        },
+      ],
+      metrics: {
+        securityHotspots: "100",
+        coverage: "80.0",
+        duplicatedLines: "0.0",
+        maintainabilityRating: "A",
+        reliabilityRating: "A",
+        securityRating: "A",
+      },
     }),
+    []
   )
 
-  if (!activeModule) return null
+  // Récupération des données selon le module actif ou le scope global
+  const data: QualityAndTestingData = useMemo(() => {
+    const rawData = currentModuleId
+      ? state.modulesData[currentModuleId]?.quality
+      : state.globalData?.quality
 
-  // On s'assure qu'on travaille sur une structure de mapping valide
-  const mapping = (activeModule.mappingItems as Record<string, string[]>) || {
-    "En écriture": [],
-    "Prêt": [],
-    "En développement": [],
-    "En test": [],
-    "En prod": [],
-    "Annulé": [],
+    return rawData || defaultData
+  }, [state, currentModuleId, defaultData])
+
+  const { testRuns, metrics } = data
+  const disabled = state.isSubmitting
+
+  // Helper centralisé pour sauvegarder dans le SetupContext
+  const updateData = (newData: QualityAndTestingData) => {
+    updateSectionData("quality", newData)
   }
 
-  const handleMappingChange = (newMapping: Record<string, string[]>) => {
-    updateActiveModule({ mappingItems: newMapping })
+  // --- Handlers Tests ---
+  const handleUpdateTestRun = (
+    id: string,
+    field: keyof TestRunItem,
+    value: string
+  ) => {
+    const updatedRuns = testRuns.map((row) =>
+      row.id === id ? { ...row, [field]: value } : row
+    )
+    updateData({ ...data, testRuns: updatedRuns })
   }
 
-  const findContainer = (id: string) => {
-    if (id in mapping) return id
-    return Object.keys(mapping).find((key) => mapping[key]?.includes(id))
-  }
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-  }
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event
-    if (!over) return
-
-    const activeContainer = findContainer(active.id as string)
-    const overContainer =
-      findContainer(over.id as string) || (over.id as string)
-
-    if (!activeContainer || !overContainer || activeContainer === overContainer)
-      return
-
-    const activeItems = mapping[activeContainer] || []
-    const overItems = mapping[overContainer] || []
-
-    const activeIndex = activeItems.indexOf(active.id as string)
-    const overIndex = overItems.indexOf(over.id as string)
-
-    let newIndex: number
-    if (over.id in mapping) {
-      newIndex = overItems.length + 1
-    } else {
-      const isBelowOverItem =
-        over &&
-        active.rect.current.translated &&
-        active.rect.current.translated.top > over.rect.top + over.rect.height
-      const modifier = isBelowOverItem ? 1 : 0
-      newIndex = overIndex >= 0 ? overIndex + modifier : overItems.length + 1
+  const handleAddTestRun = () => {
+    const newRun: TestRunItem = {
+      id: Date.now().toString(),
+      date: new Date().toISOString().split("T")[0],
+      nbTest: "0",
+      nbOk: "0",
+      nbKoBloquant: "0",
+      nbKoMajeur: "0",
+      nbKoMineur: "0",
     }
+    updateData({ ...data, testRuns: [...testRuns, newRun] })
+  }
 
-    handleMappingChange({
-      ...mapping,
-      [activeContainer]: activeItems.filter((item) => item !== active.id),
-      [overContainer]: [
-        ...overItems.slice(0, newIndex),
-        mapping[activeContainer][activeIndex],
-        ...overItems.slice(newIndex),
-      ],
+  const handleRemoveTestRun = (id: string) => {
+    updateData({
+      ...data,
+      testRuns: testRuns.filter((row) => row.id !== id),
     })
   }
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over) {
-      setActiveId(null)
-      return
-    }
-
-    const activeContainer = findContainer(active.id as string)
-    const overContainer =
-      findContainer(over.id as string) || (over.id as string)
-
-    if (activeContainer && overContainer && activeContainer === overContainer) {
-      const activeIndex = mapping[activeContainer].indexOf(active.id as string)
-      const overIndex = mapping[overContainer].indexOf(over.id as string)
-
-      if (activeIndex !== overIndex) {
-        handleMappingChange({
-          ...mapping,
-          [activeContainer]: arrayMove(
-            mapping[activeContainer],
-            activeIndex,
-            overIndex,
-          ),
-        })
-      }
-    }
-
-    setActiveId(null)
+  // --- Handlers Metrics ---
+  const handleUpdateMetric = (
+    field: keyof TechnicalMetrics,
+    value: string
+  ) => {
+    updateData({
+      ...data,
+      metrics: { ...metrics, [field]: value },
+    })
   }
 
-  return (
-    <div className="space-y-6">
-      {/* En-tête de la page */}
-      <div>
-        <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-          Mapping des Statuts Jira :{" "}
-          <span className="text-[#048890]">{activeModule.name}</span>
-        </h2>
-        <p className="text-xs text-gray-500">
-          Glissez-déposez les statuts sources de votre Jira vers les catégories cibles du workflow.
-        </p>
-      </div>
+  // Calculs auto
+  const totals = testRuns.reduce(
+    (acc, curr) => ({
+      tests: acc.tests + (Number(curr.nbTest) || 0),
+      ok: acc.ok + (Number(curr.nbOk) || 0),
+      bloquant: acc.bloquant + (Number(curr.nbKoBloquant) || 0),
+      majeur: acc.majeur + (Number(curr.nbKoMajeur) || 0),
+      mineur: acc.mineur + (Number(curr.nbKoMineur) || 0),
+    }),
+    { tests: 0, ok: 0, bloquant: 0, majeur: 0, mineur: 0 }
+  )
 
-      {/* ZONE DND DRAG AND DROP */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {TARGET_STATUSES.map((targetKey) => (
-            <DroppableContainer
-              key={targetKey}
-              id={targetKey}
-              title={targetKey}
-              items={mapping[targetKey] || []}
-            />
-          ))}
+  const successRate =
+    totals.tests > 0 ? ((totals.ok / totals.tests) * 100).toFixed(1) : "0.0"
+
+  return (
+    <div className="mx-auto max-w-5xl p-6 space-y-6">
+      {/* En-tête de la section */}
+      <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <RiShieldCheckLine className="size-4 text-[#048890]" />
+            Indicateurs de Recette & Qualité
+          </h3>
+          <p className="text-xs text-gray-500">
+            Suivi des campagnes de tests d'exécution et métriques techniques SonarQube.
+          </p>
         </div>
 
-        <DragOverlay>
-          {activeId ? (
-            <div className="flex items-center justify-between rounded-lg border border-[#048890] bg-white p-2 text-xs font-medium text-gray-800 shadow-lg dark:bg-gray-950 dark:text-gray-200">
-              <span>{activeId}</span>
-              <RiDragMove2Line className="size-3.5 shrink-0 text-gray-400" />
+        <div className="flex items-center gap-6 text-right">
+          <div>
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Taux de Réussite
+            </span>
+            <span className="font-mono text-sm font-bold text-[#048890]">
+              {successRate} %
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Couverture
+            </span>
+            <span className="font-mono text-sm font-bold text-[#048890]">
+              {metrics.coverage || "0"} %
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* SOUS-PARTIE 1 : Campagnes de Tests */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+            Campagnes de Recette
+          </span>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={handleAddTestRun}
+              className="flex items-center gap-1 rounded-md bg-[#048890]/10 px-2 py-0.5 text-xs font-semibold text-[#048890] hover:bg-[#048890]/20 transition-colors"
+            >
+              <RiAddLine className="size-3.5" />
+              Ajouter une date
+            </button>
+          )}
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/50">
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400 w-36">Date</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">Nb test</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">Nb OK</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Bloquant</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Majeur</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Mineur</th>
+                {!disabled && <th className="p-2 w-8"></th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              <tr className="bg-gray-50/80 font-mono font-bold dark:bg-gray-900/80">
+                <td className="p-2 text-gray-900 dark:text-gray-100">Total</td>
+                <td className="p-2 text-gray-900 dark:text-gray-100">{totals.tests}</td>
+                <td className="p-2 text-emerald-600 dark:text-emerald-400">{totals.ok}</td>
+                <td className="p-2 text-rose-600 dark:text-rose-400">{totals.bloquant}</td>
+                <td className="p-2 text-amber-600 dark:text-amber-400">{totals.majeur}</td>
+                <td className="p-2 text-gray-600 dark:text-gray-400">{totals.mineur}</td>
+                {!disabled && <td></td>}
+              </tr>
+
+              {testRuns.map((row) => (
+                <tr key={row.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-900/30">
+                  <td className="p-1.5">
+                    <Input
+                      type="date"
+                      disabled={disabled}
+                      value={row.date}
+                      onChange={(e) => handleUpdateTestRun(row.id, "date", e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      disabled={disabled}
+                      value={row.nbTest}
+                      onChange={(e) => handleUpdateTestRun(row.id, "nbTest", e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      disabled={disabled}
+                      value={row.nbOk}
+                      onChange={(e) => handleUpdateTestRun(row.id, "nbOk", e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      disabled={disabled}
+                      value={row.nbKoBloquant}
+                      onChange={(e) => handleUpdateTestRun(row.id, "nbKoBloquant", e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      disabled={disabled}
+                      value={row.nbKoMajeur}
+                      onChange={(e) => handleUpdateTestRun(row.id, "nbKoMajeur", e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </td>
+                  <td className="p-1.5">
+                    <Input
+                      type="number"
+                      min="0"
+                      disabled={disabled}
+                      value={row.nbKoMineur}
+                      onChange={(e) => handleUpdateTestRun(row.id, "nbKoMineur", e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </td>
+                  {!disabled && (
+                    <td className="p-1.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTestRun(row.id)}
+                        className="text-gray-400 hover:text-rose-500 transition-colors"
+                        title="Supprimer la ligne"
+                      >
+                        <RiDeleteBinLine className="size-4" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 dark:border-gray-800 pt-4" />
+
+      {/* SOUS-PARTIE 2 : Indicateurs Techniques (SonarQube) */}
+      <div className="space-y-3">
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+          Indicateurs Techniques
+        </span>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Pourcentages */}
+          <div className="space-y-2.5">
+            <div>
+              <label className="block text-gray-500 dark:text-gray-400 mb-1">
+                Security Hotspots Reviewed
+              </label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  disabled={disabled}
+                  value={metrics.securityHotspots}
+                  onChange={(e) => handleUpdateMetric("securityHotspots", e.target.value)}
+                  className="h-8 pr-7 text-xs font-mono"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
+                  %
+                </span>
+              </div>
             </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
 
-      {/* NAVIGATION FOOTER */}
-      <div className="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-gray-800">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => router.push("./step-4")}
-          disabled={loading}
-        >
-          <RiArrowLeftLine className="mr-1.5 size-4" /> Précédent
-        </Button>
+            <div>
+              <label className="block text-gray-500 dark:text-gray-400 mb-1">
+                Coverage
+              </label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  disabled={disabled}
+                  value={metrics.coverage}
+                  onChange={(e) => handleUpdateMetric("coverage", e.target.value)}
+                  className="h-8 pr-7 text-xs font-mono"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
+                  %
+                </span>
+              </div>
+            </div>
 
-        <Button
-          type="button"
-          className="bg-[#048890] hover:bg-[#036c73]"
-          onClick={() => router.push("./step-6")}
-          disabled={loading}
-        >
-          Suivant
-          <RiArrowRightLine className="ml-1.5 size-4" />
-        </Button>
-      </div>
-    </div>
-  )
-}
+            <div>
+              <label className="block text-gray-500 dark:text-gray-400 mb-1">
+                Duplicated Lines
+              </label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  disabled={disabled}
+                  value={metrics.duplicatedLines}
+                  onChange={(e) => handleUpdateMetric("duplicatedLines", e.target.value)}
+                  className="h-8 pr-7 text-xs font-mono"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
+                  %
+                </span>
+              </div>
+            </div>
+          </div>
 
-/* -------------------------------------------------------------------------- */
-/*                        SOUS-COMPOSANTS HORS COMPOSANT                       */
-/* -------------------------------------------------------------------------- */
-
-function SortableItem({ id }: { id: string }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="shadow-xs flex cursor-grab items-center justify-between rounded-lg border border-gray-200 bg-white p-2 text-xs font-medium text-gray-800 active:cursor-grabbing dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200"
-    >
-      <span className="truncate pr-1">{id}</span>
-      <RiDragMove2Line className="size-3.5 shrink-0 text-gray-400" />
-    </div>
-  )
-}
-
-function DroppableContainer({
-  id,
-  title,
-  items,
-}: {
-  id: string
-  title: string
-  items: string[]
-}) {
-  const { setNodeRef } = useDroppable({ id })
-
-  return (
-    <div className="flex max-h-[500px] flex-col justify-between overflow-auto rounded-xl border border-gray-200 bg-gray-50/50 p-3 dark:border-gray-800 dark:bg-gray-900/50">
-      <div className="flex items-center justify-between border-b border-gray-200/80 pb-2 dark:border-gray-800">
-        <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
-          {title}
-        </span>
-        <span className="rounded-full bg-gray-200/60 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-          {items.length}
-        </span>
+          {/* Ratings */}
+          <div className="space-y-2.5">
+            {(
+              [
+                { key: "maintainabilityRating", label: "Maintainability Rating" },
+                { key: "reliabilityRating", label: "Reliability Rating" },
+                { key: "securityRating", label: "Security Rating" },
+              ] as const
+            ).map(({ key, label }) => (
+              <div key={key}>
+                <label className="block text-gray-500 dark:text-gray-400 mb-1">
+                  {label}
+                </label>
+                <select
+                  disabled={disabled}
+                  value={metrics[key]}
+                  onChange={(e) => handleUpdateMetric(key, e.target.value as "A" | "B" | "C" | "D" | "E")}
+                  className="h-8 w-full rounded-md border border-gray-200 bg-transparent px-2 text-xs font-mono font-bold text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#048890] dark:border-gray-800 dark:text-gray-100"
+                >
+                  {["A", "B", "C", "D", "E"].map((rating) => (
+                    <option key={rating} value={rating} className="dark:bg-gray-900">
+                      {rating}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div
-        ref={setNodeRef}
-        className="mt-2.5 min-h-[100px] flex-1 space-y-1.5 rounded-lg border border-dashed border-gray-200 p-2 dark:border-gray-800"
-      >
-        <SortableContext items={items} strategy={verticalListSortingStrategy}>
-          {items.map((item) => (
-            <SortableItem key={item} id={item} />
-          ))}
-        </SortableContext>
+      <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-400 font-mono">
+        <span>Campagnes saisies: {testRuns.length}</span>
+        <span>Standard Qualité: SonarQube</span>
       </div>
     </div>
   )
