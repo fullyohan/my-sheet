@@ -1,10 +1,9 @@
 "use client"
 
 import React from "react"
-import { Input } from "@/components/Input" // Ajuste l'import selon ton projet
-import { RiTestTubeLine, RiShieldCheckLine, RiAddLine, RiDeleteBinLine } from "@remixicon/react"
+import { Input } from "@/components/Input"
+import { RiShieldCheckLine, RiAddLine, RiDeleteBinLine } from "@remixicon/react"
 
-// --- TYPES ---
 export interface TestRunItem {
   id: string
   date: string
@@ -24,25 +23,25 @@ export interface TechnicalMetrics {
   securityRating: "A" | "B" | "C" | "D" | "E"
 }
 
-export interface SetupCombinedData {
+export interface QualityAndTestingData {
   testRuns: TestRunItem[]
   metrics: TechnicalMetrics
 }
 
-interface SetupCombinedSectionProps {
-  data: SetupCombinedData
-  onChange: (data: SetupCombinedData) => void
+interface RecipeAndQualitySectionProps {
+  data: QualityAndTestingData
+  onChange: (data: QualityAndTestingData) => void
   disabled?: boolean
 }
 
-export default function SetupCombinedSection({
+export default function RecipeAndQualitySection({
   data,
   onChange,
   disabled = false,
-}: SetupCombinedSectionProps) {
+}: RecipeAndQualitySectionProps) {
   const { testRuns, metrics } = data
 
-  // --- HANDLERS TESTS ---
+  // --- Handlers Tests ---
   const handleUpdateTestRun = (
     id: string,
     field: keyof TestRunItem,
@@ -74,7 +73,7 @@ export default function SetupCombinedSection({
     })
   }
 
-  // --- HANDLERS METRICS ---
+  // --- Handlers Metrics ---
   const handleUpdateMetric = (
     field: keyof TechnicalMetrics,
     value: string
@@ -85,7 +84,7 @@ export default function SetupCombinedSection({
     })
   }
 
-  // Totaux calculés automatiquement
+  // Calculs auto pour la partie tests
   const totals = testRuns.reduce(
     (acc, curr) => ({
       tests: acc.tests + (Number(curr.nbTest) || 0),
@@ -101,60 +100,71 @@ export default function SetupCombinedSection({
     totals.tests > 0 ? ((totals.ok / totals.tests) * 100).toFixed(1) : "0.0"
 
   return (
-    <div className="p-6 space-y-8">
-      
-      {/* SECTION 1: CAMPAGNES DE TESTS */}
-      <div className="space-y-4">
-        {/* En-tête de section */}
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <RiTestTubeLine className="size-4 text-[#048890]" />
-              Suivi des Campagnes de Tests
-            </h3>
-            <p className="text-xs text-gray-500">
-              Saisie des récapitulatifs de tests par date et calcul automatique des totaux.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4 text-right">
-            <div>
-              <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                Taux de Réussite
-              </span>
-              <span className="font-mono text-sm font-bold text-[#048890]">
-                {successRate} %
-              </span>
-            </div>
-            {!disabled && (
-              <button
-                type="button"
-                onClick={handleAddTestRun}
-                className="flex items-center gap-1 rounded-md bg-[#048890]/10 px-2.5 py-1 text-xs font-semibold text-[#048890] hover:bg-[#048890]/20 transition-colors"
-              >
-                <RiAddLine className="size-3.5" />
-                Ajouter
-              </button>
-            )}
-          </div>
+    <div className="p-6 space-y-6">
+      {/* En-tête de la section */}
+      <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <RiShieldCheckLine className="size-4 text-[#048890]" />
+            Indicateurs de Recette & Qualité
+          </h3>
+          <p className="text-xs text-gray-500">
+            Suivi des campagnes de tests d'exécution et métriques techniques SonarQube.
+          </p>
         </div>
 
-        {/* Tableau des tests */}
+        <div className="flex items-center gap-6 text-right">
+          <div>
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Taux de Réussite
+            </span>
+            <span className="font-mono text-sm font-bold text-[#048890]">
+              {successRate} %
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Couverture
+            </span>
+            <span className="font-mono text-sm font-bold text-[#048890]">
+              {metrics.coverage || "0"} %
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* SOUS-PARTIE 1 : Campagnes de Tests */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+            Campagnes de Recette
+          </span>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={handleAddTestRun}
+              className="flex items-center gap-1 rounded-md bg-[#048890]/10 px-2 py-0.5 text-xs font-semibold text-[#048890] hover:bg-[#048890]/20 transition-colors"
+            >
+              <RiAddLine className="size-3.5" />
+              Ajouter une date
+            </button>
+          )}
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/50">
-                <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400 w-36">Date</th>
-                <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">Nb test</th>
-                <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">Nb OK</th>
-                <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">KO Bloquant</th>
-                <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">KO Majeur</th>
-                <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">KO Mineur</th>
-                {!disabled && <th className="p-2.5 w-10"></th>}
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400 w-36">Date</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">Nb test</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">Nb OK</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Bloquant</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Majeur</th>
+                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Mineur</th>
+                {!disabled && <th className="p-2 w-8"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {/* Ligne TOTAL */}
               <tr className="bg-gray-50/80 font-mono font-bold dark:bg-gray-900/80">
                 <td className="p-2 text-gray-900 dark:text-gray-100">Total</td>
                 <td className="p-2 text-gray-900 dark:text-gray-100">{totals.tests}</td>
@@ -165,10 +175,9 @@ export default function SetupCombinedSection({
                 {!disabled && <td></td>}
               </tr>
 
-              {/* Lignes dynamiques */}
               {testRuns.map((row) => (
                 <tr key={row.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-900/30">
-                  <td className="p-2">
+                  <td className="p-1.5">
                     <Input
                       type="date"
                       disabled={disabled}
@@ -177,7 +186,7 @@ export default function SetupCombinedSection({
                       className="h-8 text-xs"
                     />
                   </td>
-                  <td className="p-2">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       min="0"
@@ -187,7 +196,7 @@ export default function SetupCombinedSection({
                       className="h-8 text-xs font-mono"
                     />
                   </td>
-                  <td className="p-2">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       min="0"
@@ -197,7 +206,7 @@ export default function SetupCombinedSection({
                       className="h-8 text-xs font-mono"
                     />
                   </td>
-                  <td className="p-2">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       min="0"
@@ -207,7 +216,7 @@ export default function SetupCombinedSection({
                       className="h-8 text-xs font-mono"
                     />
                   </td>
-                  <td className="p-2">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       min="0"
@@ -217,7 +226,7 @@ export default function SetupCombinedSection({
                       className="h-8 text-xs font-mono"
                     />
                   </td>
-                  <td className="p-2">
+                  <td className="p-1.5">
                     <Input
                       type="number"
                       min="0"
@@ -228,7 +237,7 @@ export default function SetupCombinedSection({
                     />
                   </td>
                   {!disabled && (
-                    <td className="p-2 text-center">
+                    <td className="p-1.5 text-center">
                       <button
                         type="button"
                         onClick={() => handleRemoveTestRun(row.id)}
@@ -246,36 +255,19 @@ export default function SetupCombinedSection({
         </div>
       </div>
 
-      {/* SECTION 2: INDICATEURS TECHNIQUES (QUALITÉ / SONAR) */}
-      <div className="space-y-4">
-        {/* En-tête de section */}
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <RiShieldCheckLine className="size-4 text-[#048890]" />
-              Indicateurs Techniques & Qualité
-            </h3>
-            <p className="text-xs text-gray-500">
-              Métriques SonarQube, couverture de code et évaluations de sécurité.
-            </p>
-          </div>
+      <div className="border-t border-gray-100 dark:border-gray-800 pt-4" />
 
-          <div className="text-right">
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-              Couverture
-            </span>
-            <span className="font-mono text-sm font-bold text-[#048890]">
-              {metrics.coverage || "0"} %
-            </span>
-          </div>
-        </div>
+      {/* SOUS-PARTIE 2 : Indicateurs Techniques (SonarQube) */}
+      <div className="space-y-3">
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+          Indicateurs Techniques
+        </span>
 
-        {/* Grille des métriques */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Métriques numériques */}
-          <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Pourcentages */}
+          <div className="space-y-2.5">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+              <label className="block text-gray-500 dark:text-gray-400 mb-1">
                 Security Hotspots Reviewed
               </label>
               <div className="relative">
@@ -296,8 +288,8 @@ export default function SetupCombinedSection({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                Coverage (Couverture de code)
+              <label className="block text-gray-500 dark:text-gray-400 mb-1">
+                Coverage
               </label>
               <div className="relative">
                 <Input
@@ -317,7 +309,7 @@ export default function SetupCombinedSection({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+              <label className="block text-gray-500 dark:text-gray-400 mb-1">
                 Duplicated Lines
               </label>
               <div className="relative">
@@ -338,8 +330,8 @@ export default function SetupCombinedSection({
             </div>
           </div>
 
-          {/* Ratings SonarQube (A-E) */}
-          <div className="space-y-3">
+          {/* Ratings */}
+          <div className="space-y-2.5">
             {(
               [
                 { key: "maintainabilityRating", label: "Maintainability Rating" },
@@ -348,7 +340,7 @@ export default function SetupCombinedSection({
               ] as const
             ).map(({ key, label }) => (
               <div key={key}>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                <label className="block text-gray-500 dark:text-gray-400 mb-1">
                   {label}
                 </label>
                 <select
@@ -369,9 +361,8 @@ export default function SetupCombinedSection({
         </div>
       </div>
 
-      {/* Footer info */}
       <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-400 font-mono">
-        <span>Campagnes enregistrées: {testRuns.length}</span>
+        <span>Campagnes saisies: {testRuns.length}</span>
         <span>Standard Qualité: SonarQube</span>
       </div>
     </div>
