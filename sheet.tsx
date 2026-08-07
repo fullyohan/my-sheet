@@ -75,7 +75,6 @@ export const chartColors = {
   }
 }
 
-// Permet de garder l'autocomplétion des couleurs par défaut ("blue", etc.) tout en acceptant n'importe quel Hexa ("#048890" ou "048890")
 export type AvailableChartColorsKeys =
   | keyof typeof chartColors
   | (string & {})
@@ -106,15 +105,27 @@ export const getColorClassName = (
     text: "text-gray-500",
   }
 
-  // 1. Si c'est une couleur prédéfinie dans l'objet chartColors
+  // 1. Si c'est une couleur connue
   if (color in chartColors) {
     return chartColors[color as keyof typeof chartColors]?.[type] ?? fallbackColor[type]
   }
 
-  // 2. Si c'est un code Hexadécimal (avec ou sans '#')
+  // 2. Si c'est un Hexa, on applique la couleur directement via des styles dynamiques arbitraires 
+  // qu'on injecte via attribut ou classe avec valeur arbitraire exacte sans espace
   if (typeof color === "string" && (color.startsWith("#") || /^[0-9A-Fa-f]{3,8}$/.test(color))) {
     const hex = color.startsWith("#") ? color : `#${color}`
-    return `${type}-[${hex}]`
+
+    // Mappage des propriétés CSS selon le type de couleur Tremor
+    switch (type) {
+      case "bg":
+        return `[background-color:${hex}]`
+      case "stroke":
+        return `[stroke:${hex}]`
+      case "fill":
+        return `[fill:${hex}]`
+      case "text":
+        return `[color:${hex}]`
+    }
   }
 
   return fallbackColor[type]
