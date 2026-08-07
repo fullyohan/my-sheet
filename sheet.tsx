@@ -1,4 +1,4 @@
-// Tremor chartColors [v0.1.0] - Extensible avec Hexadécimal
+// Tremor chartColors [v0.1.0]
 
 export type ColorUtility = "bg" | "stroke" | "fill" | "text"
 
@@ -66,7 +66,7 @@ export const chartColors = {
 export type KnownChartColorKeys = keyof typeof chartColors
 
 /**
- * Type acceptant les couleurs prédéfinies OU n'importe quel code Hexa (ex: "#048890")
+ * Accepte les clés chartColors par défaut ("blue", "emerald"...) OU une chaîne Hexa ("#048890", "#fff"...)
  */
 export type AvailableChartColorsKeys = KnownChartColorKeys | `#${string}`
 
@@ -74,9 +74,6 @@ export const AvailableChartColors: KnownChartColorKeys[] = Object.keys(
   chartColors,
 ) as Array<KnownChartColorKeys>
 
-/**
- * Mappe les catégories vers des couleurs (clés prédéfinies ou Hexa)
- */
 export const constructCategoryColors = (
   categories: string[],
   colors: AvailableChartColorsKeys[],
@@ -89,16 +86,12 @@ export const constructCategoryColors = (
 }
 
 /**
- * Helper de vérification si une chaîne est au format Hexa
+ * Vérifie si la chaîne est un code hexadécimal valide (#RGB ou #RRGGBB)
  */
 export const isHexColor = (color: string): boolean => {
   return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)
 }
 
-/**
- * Retourne la classe Tailwind statique si c'est une couleur connue,
- * ou une classe Tailwind arbitraire (ex: `bg-[#048890]`) si c'est un Hexa.
- */
 export const getColorClassName = (
   color: AvailableChartColorsKeys,
   type: ColorUtility,
@@ -110,12 +103,12 @@ export const getColorClassName = (
     text: "text-gray-500",
   }
 
-  // 1. Si c'est une couleur nommée dans chartColors
+  // 1. Si la couleur est une clé connue dans chartColors
   if (color in chartColors) {
     return chartColors[color as KnownChartColorKeys]?.[type] ?? fallbackColor[type]
   }
 
-  // 2. Si c'est un code Hexa, on utilise les classes arbitraires Tailwind CSS
+  // 2. Si c'est un code Hexa, génère la classe Tailwind arbitraire (ex: bg-[#048890])
   if (isHexColor(color)) {
     return `${type}-[${color}]`
   }
@@ -123,16 +116,36 @@ export const getColorClassName = (
   return fallbackColor[type]
 }
 
-/**
- * Helper supplémentaire utiles pour passer directement dans l'attribut `style={{ ... }}` 
- * des composants SVG/HTML si besoin.
- */
-export const getColorStyle = (
-  color: AvailableChartColorsKeys,
-  type: "backgroundColor" | "borderColor" | "color" | "stroke" | "fill",
-): React.CSSProperties => {
-  if (isHexColor(color)) {
-    return { [type]: color }
+// Tremor getYAxisDomain [v0.0.0]
+
+export const getYAxisDomain = (
+  autoMinValue: boolean,
+  minValue: number | undefined,
+  maxValue: number | undefined,
+) => {
+  const minDomain = autoMinValue ? "auto" : (minValue ?? 0)
+  const maxDomain = maxValue ?? "auto"
+  return [minDomain, maxDomain]
+}
+
+// Tremor hasOnlyOneValueForKey [v0.1.0]
+
+export function hasOnlyOneValueForKey(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  array: any[],
+  keyToCheck: string,
+): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const val: any[] = []
+
+  for (const obj of array) {
+    if (Object.prototype.hasOwnProperty.call(obj, keyToCheck)) {
+      val.push(obj[keyToCheck])
+      if (val.length > 1) {
+        return false
+      }
+    }
   }
-  return {}
+
+  return true
 }
