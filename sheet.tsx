@@ -1,10 +1,20 @@
 "use client"
 
 import React from "react"
-import { useSetup } from "../SetupContext" // Ajuste le chemin relatif selon l'emplacement exact de ton fichier
+import { useSetup } from "../SetupContext"
 import { Input } from "@/components/Input"
 import { RiShieldCheckLine, RiAddLine, RiDeleteBinLine } from "@remixicon/react"
 import { QAData, TestRunItem, TechnicalMetrics } from "../types"
+
+// Valeurs par défaut uniquement visuelles si metrics est vide
+const DEFAULT_METRICS: TechnicalMetrics = {
+  securityHotspots: "0",
+  coverage: "0",
+  duplicatedLines: "0",
+  maintainabilityRating: "A",
+  reliabilityRating: "A",
+  securityRating: "A",
+}
 
 export default function Step6QualityPage() {
   const { activeModule, updateActiveModule, loading } = useSetup()
@@ -13,9 +23,12 @@ export default function Step6QualityPage() {
     return <p className="text-sm text-gray-500">Aucun module actif.</p>
   }
 
-  const qa: QAData = activeModule.qa
-  const { testRuns, metrics } = qa
+  // Extrait proprement même si activeModule.qa est null
+  const qa: QAData | null = activeModule.qa
+  const testRuns: TestRunItem[] = qa?.testRuns ?? []
+  const metrics: TechnicalMetrics = qa?.metrics ?? DEFAULT_METRICS
 
+  // Helper centralisé pour mettre à jour le QA
   const updateQA = (newQa: QAData) => {
     updateActiveModule({ qa: newQa })
   }
@@ -29,7 +42,7 @@ export default function Step6QualityPage() {
     const updatedRuns = testRuns.map((row) =>
       row.id === id ? { ...row, [field]: value } : row
     )
-    updateQA({ ...qa, testRuns: updatedRuns })
+    updateQA({ testRuns: updatedRuns, metrics })
   }
 
   const handleAddTestRun = () => {
@@ -42,13 +55,13 @@ export default function Step6QualityPage() {
       nbKoMajeur: "0",
       nbKoMineur: "0",
     }
-    updateQA({ ...qa, testRuns: [...testRuns, newRun] })
+    updateQA({ testRuns: [...testRuns, newRun], metrics })
   }
 
   const handleRemoveTestRun = (id: string) => {
     updateQA({
-      ...qa,
       testRuns: testRuns.filter((row) => row.id !== id),
+      metrics,
     })
   }
 
@@ -58,7 +71,7 @@ export default function Step6QualityPage() {
     value: string
   ) => {
     updateQA({
-      ...qa,
+      testRuns,
       metrics: { ...metrics, [field]: value },
     })
   }
