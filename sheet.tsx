@@ -1,126 +1,138 @@
-"use client"
+// Tremor chartColors [v0.1.0] - Extensible avec Hexadécimal
 
-import React, { useMemo } from "react"
-import { Card } from "@/components/Card"
-import { CategoryBar } from "@/components/CategoryBar"
-import { RiTeamLine } from "@remixicon/react"
+export type ColorUtility = "bg" | "stroke" | "fill" | "text"
 
-// Types pour la gestion dynamique
-type TremorColor = "indigo" | "cyan" | "amber" | "emerald" | "violet" | "rose" | "fuchsia" | "blue"
-
-interface DynamicMember {
-  id: string
-  role: string
-  // Optionnel : si un membre représente plus qu'un ETP (ex: charge/jours)
-  weight?: number 
+export const chartColors = {
+  blue: {
+    bg: "bg-blue-500",
+    stroke: "stroke-blue-500",
+    fill: "fill-blue-500",
+    text: "text-blue-500",
+  },
+  emerald: {
+    bg: "bg-emerald-500",
+    stroke: "stroke-emerald-500",
+    fill: "fill-emerald-500",
+    text: "text-emerald-500",
+  },
+  violet: {
+    bg: "bg-violet-500",
+    stroke: "stroke-violet-500",
+    fill: "fill-violet-500",
+    text: "text-violet-500",
+  },
+  amber: {
+    bg: "bg-amber-500",
+    stroke: "stroke-amber-500",
+    fill: "fill-amber-500",
+    text: "text-amber-500",
+  },
+  gray: {
+    bg: "bg-gray-500",
+    stroke: "stroke-gray-500",
+    fill: "fill-gray-500",
+    text: "text-gray-500",
+  },
+  cyan: {
+    bg: "bg-cyan-500",
+    stroke: "stroke-cyan-500",
+    fill: "fill-cyan-500",
+    text: "text-cyan-500",
+  },
+  pink: {
+    bg: "bg-pink-500",
+    stroke: "stroke-pink-500",
+    fill: "fill-pink-500",
+    text: "text-pink-500",
+  },
+  lime: {
+    bg: "bg-lime-500",
+    stroke: "stroke-lime-500",
+    fill: "fill-lime-500",
+    text: "text-lime-500",
+  },
+  fuchsia: {
+    bg: "bg-fuchsia-500",
+    stroke: "stroke-fuchsia-500",
+    fill: "fill-fuchsia-500",
+    text: "text-fuchsia-500",
+  },
+} as const satisfies {
+  [color: string]: {
+    [key in ColorUtility]: string
+  }
 }
 
-// Palette de couleurs pour attribuer dynamiquement une couleur par rôle
-const COLOR_PALETTE: TremorColor[] = ["indigo", "cyan", "amber", "emerald", "violet", "rose", "fuchsia", "blue"]
-const BG_CLASSES: Record<TremorColor, string> = {
-  indigo: "bg-indigo-500",
-  cyan: "bg-cyan-500",
-  amber: "bg-amber-500",
-  emerald: "bg-emerald-500",
-  violet: "bg-violet-500",
-  rose: "bg-rose-500",
-  fuchsia: "bg-fuchsia-500",
-  blue: "bg-blue-500",
+export type KnownChartColorKeys = keyof typeof chartColors
+
+/**
+ * Type acceptant les couleurs prédéfinies OU n'importe quel code Hexa (ex: "#048890")
+ */
+export type AvailableChartColorsKeys = KnownChartColorKeys | `#${string}`
+
+export const AvailableChartColors: KnownChartColorKeys[] = Object.keys(
+  chartColors,
+) as Array<KnownChartColorKeys>
+
+/**
+ * Mappe les catégories vers des couleurs (clés prédéfinies ou Hexa)
+ */
+export const constructCategoryColors = (
+  categories: string[],
+  colors: AvailableChartColorsKeys[],
+): Map<string, AvailableChartColorsKeys> => {
+  const categoryColors = new Map<string, AvailableChartColorsKeys>()
+  categories.forEach((category, index) => {
+    categoryColors.set(category, colors[index % colors.length])
+  })
+  return categoryColors
 }
 
-interface TeamDistributionProps {
-  // Accepte n'importe quelle liste d'équipe en prop
-  teamMembers?: DynamicMember[]
+/**
+ * Helper de vérification si une chaîne est au format Hexa
+ */
+export const isHexColor = (color: string): boolean => {
+  return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)
 }
 
-// Exemple de données dynamiques par défaut
-const DEFAULT_MEMBERS: DynamicMember[] = [
-  { id: "1", role: "Dev Back" },
-  { id: "2", role: "Dev Back" },
-  { id: "3", role: "Dev Front" },
-  { id: "4", role: "QA / Test" },
-  { id: "5", role: "Scrum Master" },
-  { id: "6", role: "Dev Back" },
-]
+/**
+ * Retourne la classe Tailwind statique si c'est une couleur connue,
+ * ou une classe Tailwind arbitraire (ex: `bg-[#048890]`) si c'est un Hexa.
+ */
+export const getColorClassName = (
+  color: AvailableChartColorsKeys,
+  type: ColorUtility,
+): string => {
+  const fallbackColor = {
+    bg: "bg-gray-500",
+    stroke: "stroke-gray-500",
+    fill: "fill-gray-500",
+    text: "text-gray-500",
+  }
 
-export function DynamicTeamDistributionCard({ teamMembers = DEFAULT_MEMBERS }: TeamDistributionProps) {
-  // Calcul dynamique de la répartition et des pourcentages
-  const { values, colors, roleStats } = useMemo(() => {
-    if (!teamMembers || teamMembers.length === 0) {
-      return { values: [], colors: [], roleStats: [] }
-    }
+  // 1. Si c'est une couleur nommée dans chartColors
+  if (color in chartColors) {
+    return chartColors[color as KnownChartColorKeys]?.[type] ?? fallbackColor[type]
+  }
 
-    const totalWeight = teamMembers.reduce((acc, m) => acc + (m.weight || 1), 0)
-    
-    // Aggrégation par rôle
-    const countsByRole = teamMembers.reduce((acc, member) => {
-      const w = member.weight || 1
-      acc[member.role] = (acc[member.role] || 0) + w
-      return acc
-    }, {} as Record<string, number>)
+  // 2. Si c'est un code Hexa, on utilise les classes arbitraires Tailwind CSS
+  if (isHexColor(color)) {
+    return `${type}-[${color}]`
+  }
 
-    // Transformation en stats avec calcul du pourcentage
-    const entries = Object.entries(countsByRole)
-    const stats = entries.map(([role, weight], index) => {
-      const percentage = Math.round((weight / totalWeight) * 100)
-      const color = COLOR_PALETTE[index % COLOR_PALETTE.length]
-      return {
-        role,
-        weight,
-        percentage,
-        color,
-      }
-    })
+  return fallbackColor[type]
+}
 
-    return {
-      values: stats.map((s) => s.percentage),
-      colors: stats.map((s) => s.color),
-      roleStats: stats,
-    }
-  }, [teamMembers])
-
-  return (
-    <Card className="lg:col-span-3 dark:border-gray-800 dark:bg-gray-900/80">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <RiTeamLine className="size-5 shrink-0" style={{ color: "#048890" }} />
-          <div>
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Répartition Dynamique de l'Équipe
-            </h2>
-            <p className="text-xs text-gray-400">Calculé sur {teamMembers.length} membre(s)</p>
-          </div>
-        </div>
-      </div>
-
-      {/* CategoryBar dynamique */}
-      {values.length > 0 ? (
-        <>
-          <CategoryBar
-            values={values}
-            colors={colors}
-            showLabels={false}
-            className="mt-4"
-          />
-
-          {/* Légende générée à la volée */}
-          <div className="mt-4 grid grid-cols-2 gap-4 text-xs sm:grid-cols-4">
-            {roleStats.map((item) => (
-              <div key={item.role} className="flex items-center gap-2">
-                <div className={`size-2.5 rounded-full ${BG_CLASSES[item.color]}`} />
-                <div>
-                  <span className="font-semibold text-gray-900 dark:text-gray-50">
-                    {item.percentage}%
-                  </span>
-                  <p className="text-gray-500 dark:text-gray-400">{item.role}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        <p className="mt-4 text-xs text-gray-400">Aucune donnée d'équipe disponible.</p>
-      )}
-    </Card>
-  )
+/**
+ * Helper supplémentaire utiles pour passer directement dans l'attribut `style={{ ... }}` 
+ * des composants SVG/HTML si besoin.
+ */
+export const getColorStyle = (
+  color: AvailableChartColorsKeys,
+  type: "backgroundColor" | "borderColor" | "color" | "stroke" | "fill",
+): React.CSSProperties => {
+  if (isHexColor(color)) {
+    return { [type]: color }
+  }
+  return {}
 }
