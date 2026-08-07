@@ -1,238 +1,85 @@
-// Tremor CategoryBar [v0.0.3]
-
 "use client"
 
 import React from "react"
+import { CategoryBar } from "./CategoryBar" // Assure-toi du bon chemin d'import
+import { AvailableChartColorsKeys } from "@/lib/chartUtils"
 
-import {
-  AvailableChartColors,
-  AvailableChartColorsKeys,
-  getColorClassName,
-} from "@/lib/chartUtils"
-import { cx } from "@/lib/utils"
-
-import { Tooltip } from "./Tooltip"
-
-const getMarkerBgColor = (
-  marker: number | undefined,
-  values: number[],
-  colors: AvailableChartColorsKeys[],
-): string => {
-  if (marker === undefined) return ""
-
-  if (marker === 0) {
-    for (let index = 0; index < values.length; index++) {
-      if (values[index] > 0) {
-        return getColorClassName(colors[index], "bg")
-      }
-    }
-  }
-
-  let prefixSum = 0
-  for (let index = 0; index < values.length; index++) {
-    prefixSum += values[index]
-    if (prefixSum >= marker) {
-      return getColorClassName(colors[index], "bg")
-    }
-  }
-
-  return getColorClassName(colors[values.length - 1], "bg")
+export interface TeamDistribution {
+  name: string
+  pct: number
 }
 
-const getPositionLeft = (
-  value: number | undefined,
-  maxValue: number,
-): number => (value ? (value / maxValue) * 100 : 0)
-
-const sumNumericArray = (arr: number[]) =>
-  arr.reduce((prefixSum, num) => prefixSum + num, 0)
-
-const formatNumber = (num: number): string => {
-  if (Number.isInteger(num)) {
-    return num.toString()
-  }
-  return num.toFixed(1)
+interface TeamsDistributionCardProps {
+  teams: TeamDistribution[]
+  title?: string
+  description?: string
+  baseColor?: AvailableChartColorsKeys
 }
 
-const BarLabels = ({ values }: { values: number[] }) => {
-  const sumValues = React.useMemo(() => sumNumericArray(values), [values])
-  let prefixSum = 0
-  let sumConsecutiveHiddenLabels = 0
+export function TeamsDistributionCard({
+  teams = [],
+  title = "Répartition par Équipe",
+  description = "Charge globale attribuée par pôle",
+  baseColor = "sky",
+}: TeamsDistributionCardProps) {
+  // Extraction des pourcentages pour le CategoryBar
+  const values = teams.map((t) => t.pct)
 
   return (
-    <div
-      className={cx(
-        // base
-        "relative mb-2 flex h-5 w-full text-sm font-medium",
-        // text color
-        "text-gray-700 dark:text-gray-300",
-      )}
-    >
-      <div className="absolute bottom-0 left-0 flex items-center">0</div>
-      {values.map((widthPercentage, index) => {
-        prefixSum += widthPercentage
+    <div className="w-full rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900/80">
+      <!-- Header -->
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+            {title}
+          </h2>
+          <p className="text-xs text-gray-400 truncate">{description}</p>
+        </div>
+        <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+          {teams.length} Équipes
+        </span>
+      </div>
 
-        const showLabel =
-          (widthPercentage >= 0.1 * sumValues ||
-            sumConsecutiveHiddenLabels >= 0.09 * sumValues) &&
-          sumValues - prefixSum >= 0.1 * sumValues &&
-          prefixSum >= 0.1 * sumValues &&
-          prefixSum < 0.9 * sumValues
+      <!-- CategoryBar avec Opacité Dynamique -->
+      <div className="mb-4">
+        <CategoryBar
+          values={values}
+          colors={[baseColor]}
+          showLabels={false}
+          useDynamicOpacity={true}
+        />
+      </div>
 
-        sumConsecutiveHiddenLabels = showLabel
-          ? 0
-          : (sumConsecutiveHiddenLabels += widthPercentage)
+      <!-- Légende Responsive & Auto-fit (Adaptation dynamique de la taille de texte) -->
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 text-[10px] sm:text-xs">
+        {teams.map((team, index) => {
+          // Même calcul d'opacité que dans CategoryBar pour faire correspondre le badge
+          const opacity = Math.max(0.25, 1 - index * 0.1)
 
-        const widthPositionLeft = getPositionLeft(widthPercentage, sumValues)
-
-        return (
-          <div
-            key={`item-${index}`}
-            className="flex items-center justify-end pr-0.5"
-            style={{ width: `${widthPositionLeft}%` }}
-          >
-            {showLabel ? (
+          return (
+            <div
+              key={team.name}
+              className="flex max-w-[140px] sm:max-w-[180px] items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200/80 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-950/40"
+            >
+              <!-- Pastille de couleur synchro -->
               <span
-                className={cx("block translate-x-1/2 text-sm tabular-nums")}
-              >
-                {formatNumber(prefixSum)}
+                className={`size-2 rounded-full shrink-0 bg-${baseColor}-500`}
+                style={{ opacity }}
+              />
+              
+              <!-- Nom de l'équipe (Tronqué si trop long pour éviter tout overflow) -->
+              <span className="text-gray-600 dark:text-gray-400 truncate">
+                {team.name}
               </span>
-            ) : null}
-          </div>
-        )
-      })}
-      <div className="absolute right-0 bottom-0 flex items-center">
-        {formatNumber(sumValues)}
+
+              <!-- Pourcentage -->
+              <span className="font-bold text-gray-900 dark:text-gray-100 ml-auto pl-1">
+                {team.pct}%
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
-
-interface CategoryBarProps extends React.HTMLAttributes<HTMLDivElement> {
-  values: number[]
-  colors?: AvailableChartColorsKeys[]
-  marker?: { value: number; tooltip?: string; showAnimation?: boolean }
-  showLabels?: boolean
-  useDynamicOpacity?: boolean
-}
-
-const CategoryBar = React.forwardRef<HTMLDivElement, CategoryBarProps>(
-  (
-    {
-      values = [],
-      colors = AvailableChartColors,
-      marker,
-      showLabels = true,
-      useDynamicOpacity = false,
-      className,
-      ...props
-    },
-    forwardedRef,
-  ) => {
-    const markerBgColor = React.useMemo(
-      () => getMarkerBgColor(marker?.value, values, colors),
-      [marker, values, colors],
-    )
-
-    const maxValue = React.useMemo(() => sumNumericArray(values), [values])
-
-    const adjustedMarkerValue = React.useMemo(() => {
-      if (marker === undefined) return undefined
-      if (marker.value < 0) return 0
-      if (marker.value > maxValue) return maxValue
-      return marker.value
-    }, [marker, maxValue])
-
-    const markerPositionLeft: number = React.useMemo(
-      () => getPositionLeft(adjustedMarkerValue, maxValue),
-      [adjustedMarkerValue, maxValue],
-    )
-
-    return (
-      <div
-        ref={forwardedRef}
-        className={cx(className)}
-        aria-label="Category bar"
-        aria-valuenow={marker?.value}
-        tremor-id="tremor-raw"
-        {...props}
-      >
-        {showLabels ? <BarLabels values={values} /> : null}
-        <div className="relative flex h-2 w-full items-center">
-          <div className="flex h-full flex-1 items-center gap-0.5 overflow-hidden rounded-full">
-            {values.map((value, index) => {
-              const barColor = colors[index] ?? "gray"
-              const percentage = (value / maxValue) * 100
-
-              // Opacité calculée si activée (décroît progressivement jusqu'à 0.25 min)
-              const calculatedOpacity = useDynamicOpacity
-                ? Math.max(0.25, 1 - index * 0.1)
-                : undefined
-
-              return (
-                <div
-                  key={`item-${index}`}
-                  className={cx(
-                    "h-full",
-                    getColorClassName(
-                      barColor as AvailableChartColorsKeys,
-                      "bg",
-                    ),
-                    percentage === 0 && "hidden",
-                  )}
-                  style={{
-                    width: `${percentage}%`,
-                    opacity: calculatedOpacity,
-                  }}
-                />
-              )
-            })}
-          </div>
-
-          {marker !== undefined ? (
-            <div
-              className={cx(
-                "absolute w-2 -translate-x-1/2",
-                marker.showAnimation &&
-                  "transform-gpu transition-all duration-300 ease-in-out",
-              )}
-              style={{
-                left: `${markerPositionLeft}%`,
-              }}
-            >
-              {marker.tooltip ? (
-                <Tooltip asChild content={marker.tooltip}>
-                  <div
-                    aria-hidden="true"
-                    className={cx(
-                      "relative mx-auto h-4 w-1 rounded-full ring-2",
-                      "ring-white dark:ring-gray-950",
-                      markerBgColor,
-                    )}
-                  >
-                    <div
-                      aria-hidden
-                      className="absolute size-7 -translate-x-[45%] -translate-y-[15%]"
-                    ></div>
-                  </div>
-                </Tooltip>
-              ) : (
-                <div
-                  className={cx(
-                    "mx-auto h-4 w-1 rounded-full ring-2",
-                    "ring-white dark:ring-gray-950",
-                    markerBgColor,
-                  )}
-                />
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    )
-  },
-)
-
-CategoryBar.displayName = "CategoryBar"
-
-export { CategoryBar, type CategoryBarProps }
