@@ -1,250 +1,140 @@
-// Tremor CategoryBar [v0.0.3]
+// Tremor chartColors [v0.1.0]
 
-"use client"
+export type ColorUtility = "bg" | "stroke" | "fill" | "text"
 
-import React from "react"
+export const chartColors = {
+  blue: {
+    bg: "bg-blue-500",
+    stroke: "stroke-blue-500",
+    fill: "fill-blue-500",
+    text: "text-blue-500",
+  },
+  emerald: {
+    bg: "bg-emerald-500",
+    stroke: "stroke-emerald-500",
+    fill: "fill-emerald-500",
+    text: "text-emerald-500",
+  },
+  violet: {
+    bg: "bg-violet-500",
+    stroke: "stroke-violet-500",
+    fill: "fill-violet-500",
+    text: "text-violet-500",
+  },
+  amber: {
+    bg: "bg-amber-500",
+    stroke: "stroke-amber-500",
+    fill: "fill-amber-500",
+    text: "text-amber-500",
+  },
+  gray: {
+    bg: "bg-gray-500",
+    stroke: "stroke-gray-500",
+    fill: "fill-gray-500",
+    text: "text-gray-500",
+  },
+  lightGray: {
+    bg: "bg-gray-400 dark:bg-gray-600",
+    stroke: "stroke-gray-400 dark:stroke-gray-600",
+    fill: "fill-gray-400 dark:fill-gray-600",
+    text: "text-gray-400 dark:text-gray-600",
+  },
+  cyan: {
+    bg: "bg-cyan-500",
+    stroke: "stroke-cyan-500",
+    fill: "fill-cyan-500",
+    text: "text-cyan-500",
+  },
+  pink: {
+    bg: "bg-pink-500",
+    stroke: "stroke-pink-500",
+    fill: "fill-pink-500",
+    text: "text-pink-500",
+  },
+  lime: {
+    bg: "bg-lime-500",
+    stroke: "stroke-lime-500",
+    fill: "fill-lime-500",
+    text: "text-lime-500",
+  },
+  fuchsia: {
+    bg: "bg-fuchsia-500",
+    stroke: "stroke-fuchsia-500",
+    fill: "fill-fuchsia-500",
+    text: "text-fuchsia-500",
+  },
+  red: {
+    bg: "bg-red-500",
+    stroke: "stroke-red-500",
+    fill: "fill-red-500",
+    text: "text-red-500",
+  },
+} as const satisfies {
+  [color: string]: {
+    [key in ColorUtility]: string
+  }
+}
 
-import {
-  AvailableChartColors,
-  AvailableChartColorsKeys,
-  getColorClassName,
-} from "@/lib/chartUtils"
-import { cx } from "@/lib/utils"
+export type AvailableChartColorsKeys = keyof typeof chartColors
 
-import { Tooltip } from "./Tooltip"
+export const AvailableChartColors: AvailableChartColorsKeys[] = Object.keys(
+  chartColors,
+) as Array<AvailableChartColorsKeys>
 
-const isHexColor = (color: string) =>
-  typeof color === "string" && (color.startsWith("#") || /^[0-9A-Fa-f]{3,8}$/.test(color))
-
-const getMarkerBgColor = (
-  marker: number | undefined,
-  values: number[],
+export const constructCategoryColors = (
+  categories: string[],
   colors: AvailableChartColorsKeys[],
-): string => {
-  if (marker === undefined) return ""
+): Map<string, AvailableChartColorsKeys> => {
+  const categoryColors = new Map<string, AvailableChartColorsKeys>()
+  categories.forEach((category, index) => {
+    categoryColors.set(category, colors[index % colors.length])
+  })
+  return categoryColors
+}
 
-  if (marker === 0) {
-    for (let index = 0; index < values.length; index++) {
-      if (values[index] > 0) {
-        return getColorClassName(colors[index], "bg")
+export const getColorClassName = (
+  color: AvailableChartColorsKeys,
+  type: ColorUtility,
+): string => {
+  const fallbackColor = {
+    bg: "bg-gray-500",
+    stroke: "stroke-gray-500",
+    fill: "fill-gray-500",
+    text: "text-gray-500",
+  }
+  return chartColors[color]?.[type] ?? fallbackColor[type]
+}
+
+// Tremor getYAxisDomain [v0.0.0]
+
+export const getYAxisDomain = (
+  autoMinValue: boolean,
+  minValue: number | undefined,
+  maxValue: number | undefined,
+) => {
+  const minDomain = autoMinValue ? "auto" : (minValue ?? 0)
+  const maxDomain = maxValue ?? "auto"
+  return [minDomain, maxDomain]
+}
+
+// Tremor hasOnlyOneValueForKey [v0.1.0]
+
+export function hasOnlyOneValueForKey(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  array: any[],
+  keyToCheck: string,
+): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const val: any[] = []
+
+  for (const obj of array) {
+    if (Object.prototype.hasOwnProperty.call(obj, keyToCheck)) {
+      val.push(obj[keyToCheck])
+      if (val.length > 1) {
+        return false
       }
     }
   }
 
-  let prefixSum = 0
-  for (let index = 0; index < values.length; index++) {
-    prefixSum += values[index]
-    if (prefixSum >= marker) {
-      return getColorClassName(colors[index], "bg")
-    }
-  }
-
-  return getColorClassName(colors[values.length - 1], "bg")
+  return true
 }
-
-const getPositionLeft = (
-  value: number | undefined,
-  maxValue: number,
-): number => (value ? (value / maxValue) * 100 : 0)
-
-const sumNumericArray = (arr: number[]) =>
-  arr.reduce((prefixSum, num) => prefixSum + num, 0)
-
-const formatNumber = (num: number): string => {
-  if (Number.isInteger(num)) {
-    return num.toString()
-  }
-  return num.toFixed(1)
-}
-
-const BarLabels = ({ values }: { values: number[] }) => {
-  const sumValues = React.useMemo(() => sumNumericArray(values), [values])
-  let prefixSum = 0
-  let sumConsecutiveHiddenLabels = 0
-
-  return (
-    <div
-      className={cx(
-        // base
-        "relative mb-2 flex h-5 w-full text-sm font-medium",
-        // text color
-        "text-gray-700 dark:text-gray-300",
-      )}
-    >
-      <div className="absolute bottom-0 left-0 flex items-center">0</div>
-      {values.map((widthPercentage, index) => {
-        prefixSum += widthPercentage
-
-        const showLabel =
-          (widthPercentage >= 0.1 * sumValues ||
-            sumConsecutiveHiddenLabels >= 0.09 * sumValues) &&
-          sumValues - prefixSum >= 0.1 * sumValues &&
-          prefixSum >= 0.1 * sumValues &&
-          prefixSum < 0.9 * sumValues
-
-        sumConsecutiveHiddenLabels = showLabel
-          ? 0
-          : (sumConsecutiveHiddenLabels += widthPercentage)
-
-        const widthPositionLeft = getPositionLeft(widthPercentage, sumValues)
-
-        return (
-          <div
-            key={`item-${index}`}
-            className="flex items-center justify-end pr-0.5"
-            style={{ width: `${widthPositionLeft}%` }}
-          >
-            {showLabel ? (
-              <span
-                className={cx("block translate-x-1/2 text-sm tabular-nums")}
-              >
-                {formatNumber(prefixSum)}
-              </span>
-            ) : null}
-          </div>
-        )
-      })}
-      <div className="absolute right-0 bottom-0 flex items-center">
-        {formatNumber(sumValues)}
-      </div>
-    </div>
-  )
-}
-
-interface CategoryBarProps extends React.HTMLAttributes<HTMLDivElement> {
-  values: number[]
-  colors?: AvailableChartColorsKeys[]
-  marker?: { value: number; tooltip?: string; showAnimation?: boolean }
-  showLabels?: boolean
-}
-
-const CategoryBar = React.forwardRef<HTMLDivElement, CategoryBarProps>(
-  (
-    {
-      values = [],
-      colors = AvailableChartColors,
-      marker,
-      showLabels = true,
-      className,
-      ...props
-    },
-    forwardedRef,
-  ) => {
-    const markerBgColor = React.useMemo(
-      () => getMarkerBgColor(marker?.value, values, colors),
-      [marker, values, colors],
-    )
-
-    const isMarkerHex = React.useMemo(
-      () => isHexColor(markerBgColor),
-      [markerBgColor],
-    )
-
-    const maxValue = React.useMemo(() => sumNumericArray(values), [values])
-
-    const adjustedMarkerValue = React.useMemo(() => {
-      if (marker === undefined) return undefined
-      if (marker.value < 0) return 0
-      if (marker.value > maxValue) return maxValue
-      return marker.value
-    }, [marker, maxValue])
-
-    const markerPositionLeft: number = React.useMemo(
-      () => getPositionLeft(adjustedMarkerValue, maxValue),
-      [adjustedMarkerValue, maxValue],
-    )
-
-    return (
-      <div
-        ref={forwardedRef}
-        className={cx(className)}
-        aria-label="Category bar"
-        aria-valuenow={marker?.value}
-        tremor-id="tremor-raw"
-        {...props}
-      >
-        {showLabels ? <BarLabels values={values} /> : null}
-        <div className="relative flex h-2 w-full items-center">
-          <div className="flex h-full flex-1 items-center gap-0.5 overflow-hidden rounded-full">
-            {values.map((value, index) => {
-              const barColor = colors[index] ?? "gray"
-              const colorValue = getColorClassName(
-                barColor as AvailableChartColorsKeys,
-                "bg",
-              )
-              const isHex = isHexColor(colorValue) || isHexColor(barColor)
-              const hexValue = colorValue.startsWith("#")
-                ? colorValue
-                : `#${colorValue}`
-              const percentage = (value / maxValue) * 100
-
-              return (
-                <div
-                  key={`item-${index}`}
-                  className={cx(
-                    "h-full",
-                    !isHex && colorValue,
-                    percentage === 0 && "hidden",
-                  )}
-                  style={{
-                    width: `${percentage}%`,
-                    backgroundColor: isHex ? hexValue : undefined,
-                  }}
-                />
-              )
-            })}
-          </div>
-
-          {marker !== undefined ? (
-            <div
-              className={cx(
-                "absolute w-2 -translate-x-1/2",
-                marker.showAnimation &&
-                  "transform-gpu transition-all duration-300 ease-in-out",
-              )}
-              style={{
-                left: `${markerPositionLeft}%`,
-              }}
-            >
-              {marker.tooltip ? (
-                <Tooltip asChild content={marker.tooltip}>
-                  <div
-                    aria-hidden="true"
-                    className={cx(
-                      "relative mx-auto h-4 w-1 rounded-full ring-2",
-                      "ring-white dark:ring-gray-950",
-                      !isMarkerHex && markerBgColor,
-                    )}
-                    style={{
-                      backgroundColor: isMarkerHex ? markerBgColor : undefined,
-                    }}
-                  >
-                    <div
-                      aria-hidden
-                      className="absolute size-7 -translate-x-[45%] -translate-y-[15%]"
-                    ></div>
-                  </div>
-                </Tooltip>
-              ) : (
-                <div
-                  className={cx(
-                    "mx-auto h-4 w-1 rounded-full ring-2",
-                    "ring-white dark:ring-gray-950",
-                    !isMarkerHex && markerBgColor,
-                  )}
-                  style={{
-                    backgroundColor: isMarkerHex ? markerBgColor : undefined,
-                  }}
-                />
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    )
-  },
-)
-
-CategoryBar.displayName = "CategoryBar"
-
-export { CategoryBar, type CategoryBarProps }
