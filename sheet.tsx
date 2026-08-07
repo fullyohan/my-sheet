@@ -1,370 +1,629 @@
 "use client"
 
-import React from "react"
+import { Button } from "@/components/Button"
+import { Card } from "@/components/Card"
+import { DatePicker } from "@/components/DatePicker"
 import { Input } from "@/components/Input"
-import { RiShieldCheckLine, RiAddLine, RiDeleteBinLine } from "@remixicon/react"
+import { Label } from "@/components/Label"
+import {
+  RiArrowLeftLine,
+  RiArrowRightLine,
+  RiCalendarEventLine,
+  RiCheckLine,
+  RiFileUploadLine,
+  RiInformationLine,
+  RiShieldCheckLine,
+  RiStackLine,
+  RiUserStarLine,
+} from "@remixicon/react"
+import axios from "axios"
+import { useParams, useRouter } from "next/navigation"
+import React, { useEffect, useMemo, useState } from "react"
 
-export interface TestRunItem {
+import ImportSection from "../_components/ImportSection"
+import RoleRateSection, { TeamsRateItem } from "../_components/RoleRateSection"
+import StatusMappingSection from "../_components/StatusMappingSection"
+import RecipeAndQualitySection, {
+  QualityAndTestingData,
+} from "../_components/RecipeAndQualitySection"
+
+const DEFAULT_QA_DATA: QualityAndTestingData = {
+  testRuns: [],
+  metrics: {
+    securityHotspots: "100",
+    coverage: "0",
+    duplicatedLines: "0",
+    maintainabilityRating: "A",
+    reliabilityRating: "A",
+    securityRating: "A",
+  },
+}
+
+export interface ModuleConfig {
   id: string
-  date: string
-  nbTest: string
-  nbOk: string
-  nbKoBloquant: string
-  nbKoMajeur: string
-  nbKoMineur: string
+  name: string
+  sp: string
+  budget: string
+  startDate: Date | undefined
+  mvpEndDate: Date | undefined
+  crEndDate: Date | undefined
+  rmFile: File | null
+  jiraFile: File | null
+  leavesFile: File | null
+  mappingItems: Record<string, string[]> | null
+  teams: TeamsRateItem[]
+  qa: QualityAndTestingData
 }
 
-export interface TechnicalMetrics {
-  securityHotspots: string
-  coverage: string
-  duplicatedLines: string
-  maintainabilityRating: "A" | "B" | "C" | "D" | "E"
-  reliabilityRating: "A" | "B" | "C" | "D" | "E"
-  securityRating: "A" | "B" | "C" | "D" | "E"
+interface ProjectInitData {
+  id?: string
+  name: string
+  modules: { id: string; name: string }[]
 }
 
-export interface QualityAndTestingData {
-  testRuns: TestRunItem[]
-  metrics: TechnicalMetrics
-}
+export default function CreateProjectWizard() {
+  const router = useRouter()
 
-interface RecipeAndQualitySectionProps {
-  data: QualityAndTestingData
-  onChange: (data: QualityAndTestingData) => void
-  disabled?: boolean
-}
+  const { projectId } = useParams()
+  const [projectName, setProjectName] = useState<string>("")
+  const [fetchingInit, setFetchingInit] = useState<boolean>(true)
+  const [currentStep, setCurrentStep] = useState(1)
 
-export default function RecipeAndQualitySection({
-  data,
-  onChange,
-  disabled = false,
-}: RecipeAndQualitySectionProps) {
-  const { testRuns, metrics } = data
+  const [modules, setModules] = useState<ModuleConfig[]>([])
+  const [activeModuleId, setActiveModuleId] = useState<string>("")
 
-  // --- Handlers Tests ---
-  const handleUpdateTestRun = (
-    id: string,
-    field: keyof TestRunItem,
-    value: string
-  ) => {
-    const updatedRuns = testRuns.map((row) =>
-      row.id === id ? { ...row, [field]: value } : row
-    )
-    onChange({ ...data, testRuns: updatedRuns })
-  }
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleAddTestRun = () => {
-    const newRun: TestRunItem = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split("T")[0],
-      nbTest: "0",
-      nbOk: "0",
-      nbKoBloquant: "0",
-      nbKoMajeur: "0",
-      nbKoMineur: "0",
+  useEffect(() => {
+    const fetchProjectInit = async () => {
+      setFetchingInit(true)
+      setError(null)
+      try {
+        const resp = await axios.get<ProjectInitData>(
+          `http://localhost:8000/api/v1/projects/${projectId}/`,
+        )
+        const data = resp.data
+
+        setProjectName(data.name)
+
+        if (data.modules && data.modules.length > 0) {
+          const mappedModules: ModuleConfig[] = data.modules.map((m) => ({
+            id: m.id,
+            name: m.name,
+            sp: "",
+            budget: "",
+            startDate: undefined,
+            mvpEndDate: undefined,
+            crEndDate: undefined,
+            rmFile: null,
+            jiraFile: null,
+            leavesFile: null,
+            mappingItems: null,
+            teams: [],
+            qa: DEFAULT_QA_DATA,
+          }))
+
+          setModules(mappedModules)
+          setActiveModuleId(mappedModules[0].id)
+        }
+      } catch (err: any) {
+        console.error(err)
+        setError("Erreur lors de la récupération des modules et du projet.")
+      } finally {
+        setFetchingInit(false)
+      }
     }
-    onChange({ ...data, testRuns: [...testRuns, newRun] })
+
+    fetchProjectInit()
+  }, [projectId])
+
+  const updateActiveModule = (fields: Partial<ModuleConfig>) => {
+    setModules((prev) =>
+      prev.map((mod) =>
+        mod.id === activeModuleId ? { ...mod, ...fields } : mod,
+      ),
+    )
   }
 
-  const handleRemoveTestRun = (id: string) => {
-    onChange({
-      ...data,
-      testRuns: testRuns.filter((row) => row.id !== id),
-    })
-  }
+  const activeModule =
+    modules.find((m) => m.id === activeModuleId) || modules[0]
 
-  // --- Handlers Metrics ---
-  const handleUpdateMetric = (
-    field: keyof TechnicalMetrics,
-    value: string
-  ) => {
-    onChange({
-      ...data,
-      metrics: { ...metrics, [field]: value },
-    })
-  }
+  const areModuleInfosValid = useMemo(() => {
+    if (modules.length === 0) return false
+    return modules.every(
+      (m) => m.name.trim() !== "" && Number(m.sp) > 0 && Number(m.budget) > 0,
+    )
+  }, [modules])
 
-  // Calculs auto pour la partie tests
-  const totals = testRuns.reduce(
-    (acc, curr) => ({
-      tests: acc.tests + (Number(curr.nbTest) || 0),
-      ok: acc.ok + (Number(curr.nbOk) || 0),
-      bloquant: acc.bloquant + (Number(curr.nbKoBloquant) || 0),
-      majeur: acc.majeur + (Number(curr.nbKoMajeur) || 0),
-      mineur: acc.mineur + (Number(curr.nbKoMineur) || 0),
-    }),
-    { tests: 0, ok: 0, bloquant: 0, majeur: 0, mineur: 0 }
+  const areModulePlanningsValid = useMemo(() => {
+    if (modules.length === 0) return false
+    return modules.every(
+      (m) =>
+        Boolean(m.startDate && m.mvpEndDate && m.mvpEndDate > m.startDate) &&
+        (m.crEndDate
+          ? m.crEndDate > (m.startDate as Date) &&
+            m.crEndDate > (m.mvpEndDate as Date)
+          : true),
+    )
+  }, [modules])
+
+  const areAllModulesImportValid = useMemo(() => {
+    if (modules.length === 0) return false
+    return modules.every((m) => Boolean(m.rmFile && m.jiraFile && m.leavesFile))
+  }, [modules])
+
+  const steps = useMemo(
+    () => [
+      {
+        step: 1,
+        label: "Infos Module",
+        icon: RiInformationLine,
+        valid: areModuleInfosValid,
+      },
+      {
+        step: 2,
+        label: "Planning",
+        icon: RiCalendarEventLine,
+        valid: areModulePlanningsValid,
+      },
+      {
+        step: 3,
+        label: "Import d'extract",
+        icon: RiFileUploadLine,
+        valid: areAllModulesImportValid,
+      },
+      {
+        step: 4,
+        label: "Rôles & Taux",
+        icon: RiUserStarLine,
+        valid: true,
+      },
+      {
+        step: 5,
+        label: "Mapping Tickets",
+        icon: RiFileUploadLine,
+        valid: true,
+      },
+      {
+        step: 6,
+        label: "Recette & Qualité",
+        icon: RiShieldCheckLine,
+        valid: true,
+      },
+    ],
+    [areModuleInfosValid, areModulePlanningsValid, areAllModulesImportValid],
   )
 
-  const successRate =
-    totals.tests > 0 ? ((totals.ok / totals.tests) * 100).toFixed(1) : "0.0"
+  const handleNext = () => {
+    if (currentStep < steps.length) setCurrentStep((prev) => prev + 1)
+  }
+
+  const handlePrev = () => {
+    if (currentStep > 1) setCurrentStep((prev) => prev - 1)
+  }
+
+  const fetchJiraStatus = async (file: File) => {
+    const formData = new FormData()
+    formData.append("jira_file", file)
+    try {
+      const resp = await axios.post(
+        "http://localhost:8000/api/v1/projects/get-jira-status",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      )
+      updateActiveModule({
+        mappingItems: { "En écriture": resp.data.jiraStatus },
+      })
+      setError("")
+    } catch (err: any) {
+      console.error(err)
+      const apiError =
+        err.response?.data?.detail || "Erreur lors de la création du projet."
+      setError(apiError)
+      updateActiveModule({ mappingItems: null })
+    }
+  }
+
+  const fetchTeams = async (file: File | null) => {
+    if (!file) return
+    const formData = new FormData()
+    formData.append("rm_file", file)
+    try {
+      const resp = await axios.post(
+        "http://localhost:8000/api/v1/projects/get-teams",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      )
+      updateActiveModule({
+        teams: resp.data.teams,
+      })
+      setError("")
+    } catch (err: any) {
+      console.error(err)
+      const apiError =
+        err.response?.data?.detail || "Erreur lors de la création du projet."
+      setError(apiError)
+      updateActiveModule({ teams: [] })
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    const formData = new FormData()
+    formData.append("name", projectName)
+
+    const modulesPayload = modules.map((m) => ({
+      id: m.id,
+      name: m.name,
+      totalSp: Number(m.sp),
+      allocatedBudget: Number(m.budget),
+      startDate: m.startDate ? m.startDate.toISOString().split("T")[0] : null,
+      mvpEndDate: m.mvpEndDate
+        ? m.mvpEndDate.toISOString().split("T")[0]
+        : null,
+      crEndDate: m.crEndDate ? m.crEndDate.toISOString().split("T")[0] : null,
+      statusMapping: m.mappingItems,
+      teams: m.teams,
+      qa: m.qa,
+    }))
+
+    formData.append("modules_metadata", JSON.stringify(modulesPayload))
+
+    modules.forEach((mod) => {
+      if (mod.rmFile)
+        formData.append(
+          "files",
+          mod.rmFile,
+          `${mod.id}_rm_file.${mod.rmFile.name.split(".").pop()}`,
+        )
+      if (mod.jiraFile)
+        formData.append(
+          "files",
+          mod.jiraFile,
+          `${mod.id}_jira_file.${mod.jiraFile.name.split(".").pop()}`,
+        )
+      if (mod.leavesFile)
+        formData.append(
+          "files",
+          mod.leavesFile,
+          `${mod.id}_leaves_file.${mod.leavesFile.name.split(".").pop()}`,
+        )
+    })
+
+    try {
+      const resp = await axios.post(
+        "http://localhost:8000/api/v1/projects/",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      )
+      const projectMetadata = resp.data.projectMetadata || resp.data
+      router.push(
+        `/projects/${projectMetadata.id}/${projectMetadata.modules[0].id}/overview`,
+      )
+    } catch (err: any) {
+      console.error(err.message)
+      const apiError =
+        err.response?.data?.detail || "Erreur lors de la création du projet."
+      setError(apiError)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (fetchingInit) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50/50 dark:bg-gray-950">
+        <p className="text-sm text-gray-500">
+          Chargement des modules et du projet...
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* En-tête de la section */}
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <RiShieldCheckLine className="size-4 text-[#048890]" />
-            Indicateurs de Recette & Qualité
-          </h3>
-          <p className="text-xs text-gray-500">
-            Suivi des campagnes de tests d'exécution et métriques techniques SonarQube.
-          </p>
+    <div className="min-h-screen bg-gray-50/50 dark:bg-gray-950">
+      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white/80 backdrop-blur-md dark:border-gray-800 dark:bg-gray-900/80">
+        <div className="mx-auto flex items-center justify-between px-4 py-4">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+          >
+            <RiArrowLeftLine className="size-4" /> Annuler
+          </button>
+          <h1 className="text-md font-bold text-gray-900 dark:text-gray-100">
+            {projectName
+              ? `Configuration : ${projectName}`
+              : "Création de Projet"}
+          </h1>
+          <div className="w-16" />
         </div>
+      </header>
 
-        <div className="flex items-center gap-6 text-right">
-          <div>
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-              Taux de Réussite
-            </span>
-            <span className="font-mono text-sm font-bold text-[#048890]">
-              {successRate} %
-            </span>
-          </div>
-          <div>
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-              Couverture
-            </span>
-            <span className="font-mono text-sm font-bold text-[#048890]">
-              {metrics.coverage || "0"} %
-            </span>
-          </div>
-        </div>
-      </div>
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mb-8 flex items-center justify-between">
+          {steps.map((item) => {
+            const isActive = currentStep === item.step
+            const isDone = currentStep > item.step
 
-      {/* SOUS-PARTIE 1 : Campagnes de Tests */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-            Campagnes de Recette
-          </span>
-          {!disabled && (
-            <button
-              type="button"
-              onClick={handleAddTestRun}
-              className="flex items-center gap-1 rounded-md bg-[#048890]/10 px-2 py-0.5 text-xs font-semibold text-[#048890] hover:bg-[#048890]/20 transition-colors"
-            >
-              <RiAddLine className="size-3.5" />
-              Ajouter une date
-            </button>
-          )}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/50">
-                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400 w-36">Date</th>
-                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">Nb test</th>
-                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">Nb OK</th>
-                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Bloquant</th>
-                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Majeur</th>
-                <th className="p-2 font-semibold text-gray-600 dark:text-gray-400">KO Mineur</th>
-                {!disabled && <th className="p-2 w-8"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              <tr className="bg-gray-50/80 font-mono font-bold dark:bg-gray-900/80">
-                <td className="p-2 text-gray-900 dark:text-gray-100">Total</td>
-                <td className="p-2 text-gray-900 dark:text-gray-100">{totals.tests}</td>
-                <td className="p-2 text-emerald-600 dark:text-emerald-400">{totals.ok}</td>
-                <td className="p-2 text-rose-600 dark:text-rose-400">{totals.bloquant}</td>
-                <td className="p-2 text-amber-600 dark:text-amber-400">{totals.majeur}</td>
-                <td className="p-2 text-gray-600 dark:text-gray-400">{totals.mineur}</td>
-                {!disabled && <td></td>}
-              </tr>
-
-              {testRuns.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-900/30">
-                  <td className="p-1.5">
-                    <Input
-                      type="date"
-                      disabled={disabled}
-                      value={row.date}
-                      onChange={(e) => handleUpdateTestRun(row.id, "date", e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      min="0"
-                      disabled={disabled}
-                      value={row.nbTest}
-                      onChange={(e) => handleUpdateTestRun(row.id, "nbTest", e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      min="0"
-                      disabled={disabled}
-                      value={row.nbOk}
-                      onChange={(e) => handleUpdateTestRun(row.id, "nbOk", e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      min="0"
-                      disabled={disabled}
-                      value={row.nbKoBloquant}
-                      onChange={(e) => handleUpdateTestRun(row.id, "nbKoBloquant", e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      min="0"
-                      disabled={disabled}
-                      value={row.nbKoMajeur}
-                      onChange={(e) => handleUpdateTestRun(row.id, "nbKoMajeur", e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </td>
-                  <td className="p-1.5">
-                    <Input
-                      type="number"
-                      min="0"
-                      disabled={disabled}
-                      value={row.nbKoMineur}
-                      onChange={(e) => handleUpdateTestRun(row.id, "nbKoMineur", e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </td>
-                  {!disabled && (
-                    <td className="p-1.5 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveTestRun(row.id)}
-                        className="text-gray-400 hover:text-rose-500 transition-colors"
-                        title="Supprimer la ligne"
-                      >
-                        <RiDeleteBinLine className="size-4" />
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-100 dark:border-gray-800 pt-4" />
-
-      {/* SOUS-PARTIE 2 : Indicateurs Techniques (SonarQube) */}
-      <div className="space-y-3">
-        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-          Indicateurs Techniques
-        </span>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          {/* Pourcentages */}
-          <div className="space-y-2.5">
-            <div>
-              <label className="block text-gray-500 dark:text-gray-400 mb-1">
-                Security Hotspots Reviewed
-              </label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  disabled={disabled}
-                  value={metrics.securityHotspots}
-                  onChange={(e) => handleUpdateMetric("securityHotspots", e.target.value)}
-                  className="h-8 pr-7 text-xs font-mono"
-                />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
-                  %
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-gray-500 dark:text-gray-400 mb-1">
-                Coverage
-              </label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  disabled={disabled}
-                  value={metrics.coverage}
-                  onChange={(e) => handleUpdateMetric("coverage", e.target.value)}
-                  className="h-8 pr-7 text-xs font-mono"
-                />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
-                  %
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-gray-500 dark:text-gray-400 mb-1">
-                Duplicated Lines
-              </label>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  disabled={disabled}
-                  value={metrics.duplicatedLines}
-                  onChange={(e) => handleUpdateMetric("duplicatedLines", e.target.value)}
-                  className="h-8 pr-7 text-xs font-mono"
-                />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
-                  %
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Ratings */}
-          <div className="space-y-2.5">
-            {(
-              [
-                { key: "maintainabilityRating", label: "Maintainability Rating" },
-                { key: "reliabilityRating", label: "Reliability Rating" },
-                { key: "securityRating", label: "Security Rating" },
-              ] as const
-            ).map(({ key, label }) => (
-              <div key={key}>
-                <label className="block text-gray-500 dark:text-gray-400 mb-1">
-                  {label}
-                </label>
-                <select
-                  disabled={disabled}
-                  value={metrics[key]}
-                  onChange={(e) => handleUpdateMetric(key, e.target.value)}
-                  className="h-8 w-full rounded-md border border-gray-200 bg-transparent px-2 text-xs font-mono font-bold text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#048890] dark:border-gray-800 dark:text-gray-100"
+            return (
+              <div key={item.step} className="flex items-center gap-2">
+                <div
+                  className={`flex size-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                    isDone
+                      ? "bg-emerald-500 text-white"
+                      : isActive
+                        ? "bg-[#048890] text-white ring-4 ring-[#048890]/20"
+                        : "bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                  }`}
                 >
-                  {["A", "B", "C", "D", "E"].map((rating) => (
-                    <option key={rating} value={rating} className="dark:bg-gray-900">
-                      {rating}
-                    </option>
-                  ))}
-                </select>
+                  {isDone ? <RiCheckLine className="size-4" /> : item.step}
+                </div>
+                <span
+                  className={`hidden text-xs font-semibold sm:inline ${
+                    isActive
+                      ? "text-gray-900 dark:text-gray-100"
+                      : "text-gray-400"
+                  }`}
+                >
+                  {item.label}
+                </span>
               </div>
-            ))}
-          </div>
+            )
+          })}
         </div>
-      </div>
 
-      <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-400 font-mono">
-        <span>Campagnes saisies: {testRuns.length}</span>
-        <span>Standard Qualité: SonarQube</span>
-      </div>
+        {error && (
+          <div className="mb-6 rounded-lg bg-rose-50 p-4 text-sm text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
+            {error}
+          </div>
+        )}
+
+        <Card className="p-6">
+          {modules.length > 1 && (
+            <div className="mb-6 border-b border-gray-200 dark:border-gray-800">
+              <nav className="-mb-px flex space-x-4 overflow-x-auto">
+                {modules.map((mod) => {
+                  const isActive = mod.id === activeModuleId
+                  return (
+                    <button
+                      key={mod.id}
+                      type="button"
+                      onClick={() => setActiveModuleId(mod.id)}
+                      className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-xs font-semibold transition-all ${
+                        isActive
+                          ? "border-[#048890] text-[#048890]"
+                          : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                      }`}
+                    >
+                      <RiStackLine className="size-4" />
+                      {mod.name.trim() || `Module ${mod.id}`}
+                    </button>
+                  )
+                })}
+              </nav>
+            </div>
+          )}
+
+          {activeModule && (
+            <>
+              {currentStep === 1 && (
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                      Informations :{" "}
+                      <span className="text-[#048890]">
+                        {activeModule.name || "Module"}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Définissez ses métriques.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold">
+                        Nom du module *
+                      </Label>
+                      <Input type="text" value={activeModule.name} disabled />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold">
+                        Chiffrage (Story Points) *
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={activeModule.sp}
+                        onChange={(e) =>
+                          updateActiveModule({ sp: e.target.value })
+                        }
+                        placeholder="ex: 120"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold">
+                        Budget alloué (€) *
+                      </Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={activeModule.budget}
+                        onChange={(e) =>
+                          updateActiveModule({ budget: e.target.value })
+                        }
+                        placeholder="ex: 25000"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                      Planning :{" "}
+                      <span className="text-[#048890]">
+                        {activeModule.name}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Définissez le calendrier spécifique à ce module.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold">
+                        Début du module *
+                      </Label>
+                      <DatePicker
+                        value={activeModule.startDate}
+                        onChange={(d) => updateActiveModule({ startDate: d })}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold text-amber-600">
+                        Fin prévue (MVP) *
+                      </Label>
+                      <DatePicker
+                        value={activeModule.mvpEndDate}
+                        onChange={(d) => updateActiveModule({ mvpEndDate: d })}
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs font-semibold text-emerald-600">
+                        Fin estimée (CR)
+                      </Label>
+                      <DatePicker
+                        value={activeModule.crEndDate}
+                        onChange={(d) => updateActiveModule({ crEndDate: d })}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {currentStep === 3 && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    Fichiers & Extracts :{" "}
+                    <span className="text-[#048890]">{activeModule.name}</span>
+                  </h2>
+                  <ImportSection
+                    rmFile={activeModule.rmFile}
+                    jiraFile={activeModule.jiraFile}
+                    leavesFile={activeModule.leavesFile}
+                    setRmFile={(file: File | null) => {
+                      updateActiveModule({ rmFile: file })
+                      fetchTeams(file)
+                    }}
+                    setJiraFile={(file: File | null) => {
+                      updateActiveModule({ jiraFile: file })
+                      if (file) fetchJiraStatus(file)
+                    }}
+                    setLeavesFile={(file: File) =>
+                      updateActiveModule({ leavesFile: file })
+                    }
+                  />
+                </div>
+              )}
+
+              {currentStep === 4 && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    Rôles & Taux :{" "}
+                    <span className="text-[#048890]">{activeModule.name}</span>
+                  </h2>
+                  <RoleRateSection
+                    items={activeModule.teams}
+                    onChange={(newRoles) =>
+                      updateActiveModule({ teams: newRoles })
+                    }
+                  />
+                </div>
+              )}
+
+              {currentStep === 5 && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    Mapping Tickets :{" "}
+                    <span className="text-[#048890]">{activeModule.name}</span>
+                  </h2>
+                  <StatusMappingSection
+                    mapping={
+                      activeModule.mappingItems as Record<string, string[]>
+                    }
+                    onChange={(newMapping) =>
+                      updateActiveModule({ mappingItems: newMapping })
+                    }
+                  />
+                </div>
+              )}
+
+              {currentStep === 6 && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    Indicateurs de Recette & Qualité :{" "}
+                    <span className="text-[#048890]">{activeModule.name}</span>
+                  </h2>
+                  <RecipeAndQualitySection
+                    data={activeModule.qa || DEFAULT_QA_DATA}
+                    onChange={(newQa) => updateActiveModule({ qa: newQa })}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="mt-8 flex items-center justify-between border-t border-gray-100 pt-4 dark:border-gray-800">
+            {currentStep > 1 ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handlePrev}
+                disabled={loading}
+              >
+                <RiArrowLeftLine className="ml-1.5 size-4" /> Précédent
+              </Button>
+            ) : (
+              <div />
+            )}
+
+            <Button
+              type="button"
+              className="bg-[#048890] hover:bg-[#036c73] disabled:bg-[#048890]/30"
+              disabled={!steps[currentStep - 1]?.valid}
+              onClick={currentStep < steps.length ? handleNext : handleSubmit}
+            >
+              {currentStep < steps.length
+                ? "Suivant"
+                : loading
+                  ? "Création en cours..."
+                  : "Créer le projet"}
+              <RiArrowRightLine className="ml-1.5 size-4" />
+            </Button>
+          </div>
+        </Card>
+      </main>
     </div>
   )
 }
