@@ -1,150 +1,136 @@
-"use client"
+from datetime import datetime
+import json
+from fastapi import APIRouter, Depends, HTTPException, status
 
-import React, { useState } from "react"
-import { Card } from "@/components/Card"
-import { Input } from "@/components/Input"
-import { Button } from "@/components/Button"
-import { RiAddLine, RiDeleteBinLine, RiMoneyEuroBoxLine, RiUserCheckLine } from "@remixicon/react"
+@router.get("/{project_id}/{module_id}/overview/", dependencies=[Depends(verify_valid_project), Depends(verify_valid_module)])
+async def get_overview(project_id: str, module_id: str):
+    # 1. Récupération sécurisée depuis Redis (support des données non encore créées)
+    raw_project_data = redis_client.get(f"projects:{project_id}:data")
+    raw_project_metadata = redis_client.get(f"projects:{project_id}:metadata")
 
-interface RoleRateMapping {
-  id: string
-  roleName: string
-  dailyRate: number | string // TJM (d'argent)
-  assigneeName: string
-}
+    project_data = json.loads(raw_project_data) if raw_project_data else {}
+    project_metadata = json.loads(raw_project_metadata) if raw_project_metadata else {}
 
-export default function RoleRateMappingSection() {
-  const [roleMappings, setRoleMappings] = useState<RoleRateMapping[]>([
-    { id: "1", roleName: "Développeur Senior", dailyRate: 550, assigneeName: "John Doe" },
-    { id: "2", roleName: "Lead Tech", dailyRate: 650, assigneeName: "Alice Smith" },
-    { id: "3", roleName: "Product Owner", dailyRate: 500, assigneeName: "Bob Martin" },
-  ])
+    # Extraction sécurisée du module dans metadata et data
+    modules_list = project_metadata.get("modules", [])
+    module_metadata = next((m for m in modules_list if m.get("id") == module_id), {})
+    module_data = project_data.get(module_id) or {}
 
-  // Ajouter une ligne
-  const handleAddRow = () => {
-    setRoleMappings((prev) => [
-      ...prev,
-      { id: Date.now().toString(), roleName: "", dailyRate: "", assigneeName: "" },
-    ])
-  }
+    # 2. Sécurisation des données Jira & RM (si pas encore importées = liste vide)
+    tickets = module_data.get("jiraEntries") or []
+    rm_entries = module_data.get("rmEntries") or []
 
-  // Mettre à jour un champ
-  const handleUpdateRow = (id: string, field: keyof RoleRateMapping, value: string | number) => {
-    setRoleMappings((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row))
-    )
-  }
+    total_tickets = len(tickets)
+    total_rm = len(rm_entries)
 
-  // Supprimer une ligne
-  const handleDeleteRow = (id: string) => {
-    setRoleMappings((prev) => prev.filter((row) => row.id !== id))
-  }
+    # 3. Traitement des Change Requests (Tags + Type)
+    change_requests = [
+        t for t in tickets 
+        if isinstance(t.get("Tags"), str) and "ChangeRequest" in t.get("Tags") and t.get("Type de ticket") == "Story"
+    ] if tickets else []
 
-  // Calcul du TJM Moyen
-  const totalRates = roleMappings.reduce((acc, curr) => acc + (Number(curr.dailyRate) || 0), 0)
-  const avgRate = roleMappings.length > 0 ? (totalRates / roleMappings.length).toFixed(0) : 0
+    cr_count = len(change_requests)
+    dev_cr_count = len([cr for cr in change_requests if cr.get("État") in ["En test", "En production"]])
 
-  return (
-    <Card className="p-6 space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <RiMoneyEuroBoxLine className="size-4 text-[#048890]" />
-            Correspondance des Rôles & Tarifs (TJM)
-          </h3>
-          <p className="text-xs text-gray-500">
-            Définissez les rôles de l'équipe, leur coût journalier (TJM) et la personne assignée.
-          </p>
-        </div>
+    # Lambdas sécurisées contre les divisions par zéro
+    def get_pct_by_status(status_name: str) -> float:
+        if not total_tickets:
+            return 0.0
+        matching = len([t for t in tickets if t.get("État") == status_name])
+        return round((matching / total_tickets) * 100, 1)
+
+    def get_ticket_sp(status_list: list) -> float:
+        if not tickets:
+            return 0.0
+        return sum([
+            float(t.get("Champs personnalisés (Story Points)") or 0) 
+            for t in tickets if t.get("État") in status_list
+        ])
+
+    # 4. Traitement des Équipes & Budget RM (Correction du bug team_name)
+    teams = module_metadata.get("teams") or []
+    incurred_budget = 0.0
+
+    for team in teams:
+        team_name = team.get("name")
+        # Filtrage par NOM d'équipe (Role) et non par nombre
+        team_members = [r for r in rm_entries if r.get("Role") == team_name]
+        team_count = len(team_members)
         
-        {/* Résumé rapide d'argent */}
-        <div className="text-right">
-          <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-            TJM Moyen
-          </span>
-          <span className="font-mono text-sm font-bold text-[#048890]">
-            {avgRate} € / jour
-          </span>
-        </div>
-      </div>
+        # Somme des heures pour l'équipe
+        team_hours = sum([float(r.get("Incurred (hours)") or 0) for r in team_members])
+        tjm = float(team.get("tjm") or 0)
 
-      {/* Tableau Simple */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-800 dark:bg-gray-900/50">
-              <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">Rôle / Post</th>
-              <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">TJM (€ / jour)</th>
-              <th className="p-2.5 font-semibold text-gray-600 dark:text-gray-400">Assigné à</th>
-              <th className="p-2.5 text-right font-semibold text-gray-600 dark:text-gray-400">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-            {roleMappings.map((row) => (
-              <tr key={row.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-900/30">
-                <td className="p-2">
-                  <Input
-                    type="text"
-                    value={row.roleName}
-                    onChange={(e) => handleUpdateRow(row.id, "roleName", e.target.value)}
-                    placeholder="ex: Dev Fullstack"
-                    className="h-8 text-xs"
-                  />
-                </td>
-                <td className="p-2 w-36">
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      value={row.dailyRate}
-                      onChange={(e) => handleUpdateRow(row.id, "dailyRate", e.target.value)}
-                      placeholder="500"
-                      className="h-8 pr-7 text-xs font-mono"
-                    />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
-                      €
-                    </span>
-                  </div>
-                </td>
-                <td className="p-2">
-                  <Input
-                    type="text"
-                    value={row.assigneeName}
-                    onChange={(e) => handleUpdateRow(row.id, "assigneeName", e.target.value)}
-                    placeholder="ex: Alex Dupont"
-                    className="h-8 text-xs"
-                  />
-                </td>
-                <td className="p-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteRow(row.id)}
-                    className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
-                  >
-                    <RiDeleteBinLine className="size-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        team["count"] = team_count
+        team["pct"] = round((team_count * 100 / total_rm), 1) if total_rm > 0 else 0.0
+        
+        incurred_budget += round(team_hours * tjm, 1)
 
-      {/* Ajouter un rôle */}
-      <div className="flex justify-between items-center pt-2">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleAddRow}
-          className="flex items-center gap-1.5 text-xs h-8"
-        >
-          <RiAddLine className="size-4" /> Ajouter un rôle
-        </Button>
+    # 5. Extraction sécurisée des métadonnées numériques et dates
+    start_date_str = module_metadata.get("startDate")
+    mvp_end_date_str = module_metadata.get("mvpEndDate")
 
-        <span className="text-[11px] text-gray-400 font-mono">
-          Total d'équipe: {roleMappings.length} personne(s)
-        </span>
-      </div>
-    </Card>
-  )
-}
+    try:
+        project_total_sp = float(module_metadata.get("totalSp") or 0)
+    except (ValueError, TypeError):
+        project_total_sp = 0.0
+
+    try:
+        total_budget = float(module_metadata.get("allocatedBudget") or 0)
+    except (ValueError, TypeError):
+        total_budget = 0.0
+
+    # 6. Calculs des pourcentages de progression
+    timeline_pct = 0.0
+    if start_date_str and mvp_end_date_str:
+        try:
+            d_start = datetime.strptime(start_date_str, "%Y-%m-%d")
+            d_end = datetime.strptime(mvp_end_date_str, "%Y-%m-%d")
+            total_days = (d_end - d_start).days
+
+            if total_days > 0:
+                elapsed_days = (datetime.now() - d_start).days
+                # Borne la timeline entre 0 et 100%
+                timeline_pct = round(max(0, min(100, (elapsed_days * 100 / total_days))), 1)
+        except (ValueError, TypeError):
+            timeline_pct = 0.0
+
+    consumed_pct = round((incurred_budget * 100 / total_budget), 1) if total_budget > 0 else 0.0
+
+    dev_sp = get_ticket_sp(["En test", "En production"])
+    writing_sp = get_ticket_sp(["En test", "En production", "Prêt", "En développement"])
+
+    dev_pct = round((dev_sp * 100 / project_total_sp), 1) if project_total_sp > 0 else 0.0
+    writing_pct = round((writing_sp * 100 / project_total_sp), 1) if project_total_sp > 0 else 0.0
+
+    # 7. Payload de retour unifié
+    return {
+        "startDate": start_date_str or "N/A",
+        "mvpEndDate": mvp_end_date_str or "N/A",
+        "crEndDate": module_metadata.get("crEndDate") or "N/A",
+        "teams": teams,
+        "backlogProgress": {
+            "cr": {
+                "count": cr_count,
+                "unestimatedCount": len([
+                    cr for cr in change_requests 
+                    if not cr.get("Champs personnalisés (Story Points)")
+                ]),
+                "devCount": dev_cr_count,
+                "devProgressPct": round((dev_cr_count * 100 / cr_count), 1) if cr_count > 0 else 0.0
+            },
+            "workDistribution": {
+                "inWritingPct": get_pct_by_status("En écriture"),
+                "readyPct": get_pct_by_status("Prêt"),
+                "inDevPct": get_pct_by_status("En développement"),
+                "inTestPct": get_pct_by_status("En test"),
+                "inProdPct": get_pct_by_status("En production"),
+            }
+        },
+        "projectProgress": {
+            "timelinePct": timeline_pct,
+            "consumedPct": consumed_pct,
+            "devPct": dev_pct,
+            "writtingPct": writing_pct
+        }
+    }
