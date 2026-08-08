@@ -52,7 +52,18 @@ async def get_overview(project_id: str, module_id: str):
         tjm = float(t.get("tjm") or 0)
         incurred_budget += hours * tjm
 
-    # 5. Métadonnées & Dates
+    # 5. Extraction QA, Métriques & calculs pour le Circle Chart
+    qa_data = module_metadata.get("qa") or {}
+    test_runs = qa_data.get("testRuns") or []
+    metrics = qa_data.get("metrics") or {}
+
+    total_tests = sum(int(r.get("nbTest") or 0) for r in test_runs)
+    total_ok = sum(int(r.get("nbOk") or 0) for r in test_runs)
+    total_bloquant = sum(int(r.get("nbKoBloquant") or 0) for r in test_runs)
+    total_majeur = sum(int(r.get("nbKoMajeur") or 0) for r in test_runs)
+    total_mineur = sum(int(r.get("nbKoMineur") or 0) for r in test_runs)
+
+    # 6. Métadonnées & Dates
     start_date = module_metadata.get("startDate")
     mvp_end_date = module_metadata.get("mvpEndDate")
     project_total_sp = float(module_metadata.get("totalSp") or 0)
@@ -70,7 +81,7 @@ async def get_overview(project_id: str, module_id: str):
         except ValueError:
             pass
 
-    # 6. Réponse finale
+    # 7. Réponse finale
     return {
         "startDate": start_date or "N/A",
         "mvpEndDate": mvp_end_date or "N/A",
@@ -89,6 +100,22 @@ async def get_overview(project_id: str, module_id: str):
                 "inDevPct": get_pct_by_status("En développement"),
                 "inTestPct": get_pct_by_status("En test"),
                 "inProdPct": get_pct_by_status("En production"),
+            }
+        },
+        "qaProgress": {
+            "circlePct": {
+                "directValidationPct": round((total_ok * 100 / total_tests), 1) if total_tests else 0.0,
+                "reworkBloquantPct": round((total_bloquant * 100 / total_tests), 1) if total_tests else 0.0,
+                "reworkMajeurPct": round((total_majeur * 100 / total_tests), 1) if total_tests else 0.0,
+                "reworkMineurPct": round((total_mineur * 100 / total_tests), 1) if total_tests else 0.0,
+            },
+            "metrics": {
+                "securityHotspots": float(metrics.get("securityHotspots") or 0.0),
+                "coverage": float(metrics.get("coverage") or 0.0),
+                "duplicatedLines": float(metrics.get("duplicatedLines") or 0.0),
+                "maintainabilityRating": metrics.get("maintainabilityRating") or "A",
+                "reliabilityRating": metrics.get("reliabilityRating") or "A",
+                "securityRating": metrics.get("securityRating") or "A"
             }
         },
         "projectProgress": {
