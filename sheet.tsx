@@ -16,9 +16,9 @@ export default function Step6QualityPage() {
   const qa: QualityAndTestingData | null = activeModule.qa
   const testRuns: TestRunItem[] = qa?.testRuns ?? []
   const metrics: TechnicalMetrics = qa?.metrics ?? {
-    securityHotspots: "0",
-    coverage: "0",
-    duplicatedLines: "0",
+    securityHotspots: 0,
+    coverage: 0,
+    duplicatedLines: 0,
     maintainabilityRating: "A",
     reliabilityRating: "A",
     securityRating: "A",
@@ -31,7 +31,7 @@ export default function Step6QualityPage() {
   const handleUpdateTestRun = (
     id: string,
     field: keyof TestRunItem,
-    value: string
+    value: string | number
   ) => {
     const updatedRuns = testRuns.map((row) =>
       row.id === id ? { ...row, [field]: value } : row
@@ -43,10 +43,10 @@ export default function Step6QualityPage() {
     const newRun: TestRunItem = {
       id: Date.now().toString(),
       date: new Date().toISOString().split("T")[0],
-      nbOk: "0",
-      nbKoBloquant: "0",
-      nbKoMajeur: "0",
-      nbKoMineur: "0",
+      nbOk: 0,
+      nbKoBloquant: 0,
+      nbKoMajeur: 0,
+      nbKoMineur: 0,
     }
     updateQA({ testRuns: [...testRuns, newRun], metrics })
   }
@@ -60,7 +60,7 @@ export default function Step6QualityPage() {
 
   const handleUpdateMetric = (
     field: keyof TechnicalMetrics,
-    value: string
+    value: string | number
   ) => {
     updateQA({
       testRuns,
@@ -68,13 +68,13 @@ export default function Step6QualityPage() {
     })
   }
 
-  // Cumul par type de test
+  // Cumul par type de test (toutes les valeurs sont des 'number')
   const totals = testRuns.reduce(
     (acc, curr) => ({
-      ok: acc.ok + (Number(curr.nbOk) || 0),
-      bloquant: acc.bloquant + (Number(curr.nbKoBloquant) || 0),
-      majeur: acc.majeur + (Number(curr.nbKoMajeur) || 0),
-      mineur: acc.mineur + (Number(curr.nbKoMineur) || 0),
+      ok: acc.ok + (curr.nbOk || 0),
+      bloquant: acc.bloquant + (curr.nbKoBloquant || 0),
+      majeur: acc.majeur + (curr.nbKoMajeur || 0),
+      mineur: acc.mineur + (curr.nbKoMineur || 0),
     }),
     { ok: 0, bloquant: 0, majeur: 0, mineur: 0 }
   )
@@ -112,7 +112,7 @@ export default function Step6QualityPage() {
               Couverture
             </span>
             <span className="font-mono text-sm font-bold text-[#048890]">
-              {metrics.coverage || "0"} %
+              {metrics.coverage ?? 0} %
             </span>
           </div>
         </div>
@@ -160,10 +160,10 @@ export default function Step6QualityPage() {
 
               {testRuns.map((row) => {
                 const rowTotal =
-                  (Number(row.nbOk) || 0) +
-                  (Number(row.nbKoBloquant) || 0) +
-                  (Number(row.nbKoMajeur) || 0) +
-                  (Number(row.nbKoMineur) || 0)
+                  (row.nbOk || 0) +
+                  (row.nbKoBloquant || 0) +
+                  (row.nbKoMajeur || 0) +
+                  (row.nbKoMineur || 0)
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50/30 dark:hover:bg-gray-900/30">
@@ -184,8 +184,14 @@ export default function Step6QualityPage() {
                         type="number"
                         min="0"
                         disabled={loading}
-                        value={row.nbOk}
-                        onChange={(e) => handleUpdateTestRun(row.id, "nbOk", e.target.value)}
+                        value={row.nbOk ?? ""}
+                        onChange={(e) =>
+                          handleUpdateTestRun(
+                            row.id,
+                            "nbOk",
+                            isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                          )
+                        }
                         className="h-8 text-xs font-mono"
                       />
                     </td>
@@ -194,8 +200,14 @@ export default function Step6QualityPage() {
                         type="number"
                         min="0"
                         disabled={loading}
-                        value={row.nbKoBloquant}
-                        onChange={(e) => handleUpdateTestRun(row.id, "nbKoBloquant", e.target.value)}
+                        value={row.nbKoBloquant ?? ""}
+                        onChange={(e) =>
+                          handleUpdateTestRun(
+                            row.id,
+                            "nbKoBloquant",
+                            isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                          )
+                        }
                         className="h-8 text-xs font-mono"
                       />
                     </td>
@@ -204,8 +216,14 @@ export default function Step6QualityPage() {
                         type="number"
                         min="0"
                         disabled={loading}
-                        value={row.nbKoMajeur}
-                        onChange={(e) => handleUpdateTestRun(row.id, "nbKoMajeur", e.target.value)}
+                        value={row.nbKoMajeur ?? ""}
+                        onChange={(e) =>
+                          handleUpdateTestRun(
+                            row.id,
+                            "nbKoMajeur",
+                            isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                          )
+                        }
                         className="h-8 text-xs font-mono"
                       />
                     </td>
@@ -214,8 +232,14 @@ export default function Step6QualityPage() {
                         type="number"
                         min="0"
                         disabled={loading}
-                        value={row.nbKoMineur}
-                        onChange={(e) => handleUpdateTestRun(row.id, "nbKoMineur", e.target.value)}
+                        value={row.nbKoMineur ?? ""}
+                        onChange={(e) =>
+                          handleUpdateTestRun(
+                            row.id,
+                            "nbKoMineur",
+                            isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                          )
+                        }
                         className="h-8 text-xs font-mono"
                       />
                     </td>
@@ -257,8 +281,13 @@ export default function Step6QualityPage() {
                   max="100"
                   step="0.1"
                   disabled={loading}
-                  value={metrics.securityHotspots}
-                  onChange={(e) => handleUpdateMetric("securityHotspots", e.target.value)}
+                  value={metrics.securityHotspots ?? ""}
+                  onChange={(e) =>
+                    handleUpdateMetric(
+                      "securityHotspots",
+                      isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                    )
+                  }
                   className="h-8 pr-7 text-xs font-mono"
                 />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
@@ -278,8 +307,13 @@ export default function Step6QualityPage() {
                   max="100"
                   step="0.1"
                   disabled={loading}
-                  value={metrics.coverage}
-                  onChange={(e) => handleUpdateMetric("coverage", e.target.value)}
+                  value={metrics.coverage ?? ""}
+                  onChange={(e) =>
+                    handleUpdateMetric(
+                      "coverage",
+                      isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                    )
+                  }
                   className="h-8 pr-7 text-xs font-mono"
                 />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
@@ -299,8 +333,13 @@ export default function Step6QualityPage() {
                   max="100"
                   step="0.1"
                   disabled={loading}
-                  value={metrics.duplicatedLines}
-                  onChange={(e) => handleUpdateMetric("duplicatedLines", e.target.value)}
+                  value={metrics.duplicatedLines ?? ""}
+                  onChange={(e) =>
+                    handleUpdateMetric(
+                      "duplicatedLines",
+                      isNaN(e.target.valueAsNumber) ? 0 : e.target.valueAsNumber
+                    )
+                  }
                   className="h-8 pr-7 text-xs font-mono"
                 />
                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono text-xs text-gray-400">
