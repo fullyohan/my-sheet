@@ -24,7 +24,7 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
     new_name = payload.name
     new_slug = slugify(new_name)
 
-    # 2. Renommage global du projet
+    # 2. Renommage global du projet (Dossier + Clés Redis)
     if project_slug != new_slug:
         if redis_client.exists(f"projects:{new_slug}:metadata"):
             raise HTTPException(
@@ -38,6 +38,7 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
         if current_dir.exists():
             current_dir.rename(target_dir)
 
+        # Suppression des anciennes clés Redis du projet
         redis_client.delete(f"projects:{project_slug}:metadata")
         redis_client.delete(f"projects:{project_slug}:data")
         redis_client.lrem("projects:all", 0, project_slug)
@@ -45,22 +46,21 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
     else:
         target_dir = UPLOAD_DIR / project_slug
 
-    # Map de recherche rapide des métadonnées existantes des modules par leur ID actuel
+    # Map des métadonnées existantes des modules par leur ID actuel
     old_modules_dict = {m["id"]: m for m in metadata.get("modules", [])}
 
-    # Tracking des migrations et des identifiants actifs
     migrated_old_ids = set()
     active_new_ids = set()
     updated_modules_list = []
 
-    # 3. Traitement de chaque module du payload
+    # 3. Traitement de chaque module
     for mod in payload.modules:
         new_mod_id = slugify(mod.name)
         old_mod_id = slugify(mod.old_name) if mod.old_name else new_mod_id
 
         active_new_ids.add(new_mod_id)
 
-        # REnOMMAGE DU MODULE : Migration dossier + Redis data
+        # Renommage du module : Dossier + Redis Data
         if old_mod_id != new_mod_id and old_mod_id in old_modules_dict:
             migrated_old_ids.add(old_mod_id)
 
@@ -72,11 +72,10 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
             if old_mod_id in existing_data:
                 existing_data[new_mod_id] = existing_data.pop(old_mod_id)
 
-        # S'assurer que le dossier existe sur le disque
+        # Création du dossier du module s'il est nouveau
         (target_dir / new_mod_id).mkdir(parents=True, exist_ok=True)
 
-        # BACKUP & MISE À JOUR : On clone la totalité de l'ancien objet metadata
-        # et on modifie UNIQUEMENT name et id.
+        # Backup & update du module : Clone complet des propriétés
         prev_id = old_mod_id if old_mod_id in old_modules_dict else new_mod_id
         module_backup = old_modules_dict.get(prev_id, {}).copy()
 
@@ -85,7 +84,7 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
 
         updated_modules_list.append(module_backup)
 
-    # 4. Nettoyage des modules réellement supprimés
+    # 4. Suppression des modules retirés
     for old_mod_id in list(old_modules_dict.keys()):
         if old_mod_id not in active_new_ids and old_mod_id not in migrated_old_ids:
             mod_dir = target_dir / old_mod_id
@@ -94,10 +93,12 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
 
             existing_data.pop(old_mod_id, None)
 
-    # 5. Sauvegarde
-    metadata["name"] = new_name
+    # 5. Sauvegarde finale avec MISE À JOUR DE L'ID ET DU NOM DANS METADATA
+    metadata["id"] = new_slug      # <-- L'ID du projet dans la metadata reflète désormais le new_slug
+    metadata["name"] = new_name    # Nouveau nom d'affichage
     metadata["modules"] = updated_modules_list
 
+    # Sauvegarde sous la nouvelle clé Redis du projet
     redis_client.set(f"projects:{new_slug}:metadata", json.dumps(metadata))
     redis_client.set(f"projects:{new_slug}:data", json.dumps(existing_data))
 
