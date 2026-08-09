@@ -111,6 +111,271 @@ async def quick_update_project(project_slug: str, payload: QuickUpdateProjectSch
 
 
 
+"use client"
+
+import React, { useState, useEffect } from "react"
+import axios from "axios"
+import { useRouter } from "next/navigation"
+import { Plus, Trash2 } from "lucide-react"
+
+import { Button } from "@/components/Button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/Dialog"
+import { Input } from "../Input"
+import { Label } from "../Label"
+
+interface ModuleState {
+  name: string
+  old_name?: string | null
+}
+
+interface ProjectData {
+  id: string
+  name: string
+  modules?: { name: string }[]
+}
+
+interface EditModalProps {
+  project: ProjectData | null
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+}
+
+export const EditProjectModal = ({
+  project,
+  isOpen,
+  onClose,
+  onConfirm,
+}: EditModalProps) => {
+  const [projectName, setProjectName] = useState("")
+  const [modules, setModules] = useState<ModuleState[]>([])
+  
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+
+  // Synchro à l'ouverture de la modal
+  useEffect(() => {
+    if (project && isOpen) {
+      setProjectName(project.name || "")
+      
+      const initialModules = (project.modules || []).map((m) => ({
+        name: m.name,
+        old_name: m.name,
+      }))
+      
+      setModules(initialModules)
+      setError(null)
+    }
+  }, [project, isOpen])
+
+  const isValid = Boolean(
+    projectName.trim() &&
+      modules.length > 0 &&
+      modules.every((m) => m.name.trim() !== "")
+  )
+
+  const handleAddModule = () => {
+    setModules((prev) => [
+      ...prev,
+      {
+        name: `Module ${prev.length + 1}`,
+        old_name: null,
+      },
+    ])
+  }
+
+  const handleRemoveModule = (indexToRemove: number) => {
+    setModules((prev) => prev.filter((_, idx) => idx !== indexToRemove))
+  }
+
+  const handleModuleNameChange = (index: number, newName: string) => {
+    setModules((prev) =>
+      prev.map((m, idx) => (idx === index ? { ...m, name: newName } : m))
+    )
+  }
+
+  const buildPayload = () => {
+    return {
+      name: projectName.trim(),
+      modules: modules.map((m) => ({
+        name: m.name.trim(),
+        old_name: m.old_name || null,
+      })),
+    }
+  }
+
+  const handleQuickSave = async () => {
+    if (!isValid || !project) return null
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const resp = await axios.patch(
+        `http://localhost:8000/api/v1/projects/${project.id}`,
+        buildPayload()
+      )
+      
+      onConfirm()
+      onClose()
+      return resp.data
+    } catch (err: any) {
+      console.error(err)
+      const apiError =
+        err.response?.data?.detail || "Erreur lors de la mise à jour du projet."
+      setError(apiError)
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoToSetup = async () => {
+    const updatedData = await handleQuickSave()
+    if (updatedData) {
+      const updatedSlug = updatedData.slug || project?.id
+      router.push(`/projects/${updatedSlug}/setup?edit-mode=true`)
+    }
+  }
+
+  return (
+    <div className="flex justify-center">
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Modifier le projet</DialogTitle>
+            <DialogDescription className="mt-1 text-sm leading-6">
+              Mettez à jour le nom du projet et gérez ses modules.
+            </DialogDescription>
+          </DialogHeader>
+
+          {error && (
+            <div className="mt-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">
+              {error}
+            </div>
+          )}
+
+          <div className="mt-4 space-y-6">
+            {/* Nom du Projet */}
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-sm font-semibold text-gray-700">
+                Nom du projet *
+              </Label>
+              <Input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="ex: Batica E-Commerce"
+                required
+              />
+            </div>
+
+            {/* Liste des Modules */}
+            <div className="space-y-4 rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Modules du projet ({modules.length})
+                </Label>
+                <Button
+                  type="button"
+                  onClick={handleAddModule}
+                  variant="secondary"
+                  className="h-8 gap-1.5 text-xs text-[#048890] hover:bg-[#048890]/10"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Ajouter un module
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 max-h-60 overflow-y-auto pr-1">
+                {modules.map((mod, index) => (
+                  <div key={`mod-${index}`} className="flex items-center gap-2">
+                    <div className="flex-1 flex flex-col gap-1">
+                      <Label className="text-xs font-medium text-gray-600">
+                        Module {index + 1} *
+                      </Label>
+                      <Input
+                        type="text"
+                        value={mod.name}
+                        onChange={(e) =>
+                          handleModuleNameChange(index, e.target.value)
+                        }
+                        placeholder="Nom du module"
+                        required
+                      />
+                    </div>
+                    {modules.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => handleRemoveModule(index)}
+                        className="mt-5 h-10 w-10 p-0 text-gray-400 hover:text-rose-600"
+                        title="Supprimer le module"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-gray-100 pt-4 gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={loading}
+                className="w-full sm:w-fit"
+              >
+                Annuler
+              </Button>
+            </DialogClose>
+
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button
+                type="button"
+                onClick={handleQuickSave}
+                disabled={!isValid || loading}
+                variant="secondary"
+                className="w-full sm:w-fit"
+              >
+                {loading ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleGoToSetup}
+                disabled={!isValid || loading}
+                className="w-full bg-[#048890] hover:bg-[#036c73] disabled:bg-[#048890]/30 sm:w-fit"
+              >
+                Modifier plus / Setup ➔
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+
+
+
+
+
+
+
 
 
 
