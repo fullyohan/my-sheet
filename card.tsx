@@ -996,3 +996,110 @@ const SetupFooter = () => {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@router.put("/{project_id}")
+async def update_project(
+    project_id: str,
+    modules_metadata: str = Form(...),
+    files: Optional[List[UploadFile]] = File(None)
+):
+    # 1. Vérification de l'existence du projet dans Redis
+    metadata_raw = redis_client.get(f"projects:{project_id}:metadata")
+    if not metadata_raw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Le projet '{project_id}' n'existe pas."
+        )
+
+    metadata = json.loads(metadata_raw)
+    modules_raw = json.loads(modules_metadata)
+
+    # Nom du projet récupéré directement des métadonnées existantes
+    project_name = metadata.get("name", project_id)
+
+    # 2. Récupération des données existantes des modules
+    existing_data_raw = redis_client.get(f"projects:{project_id}:data")
+    modules_data = json.loads(existing_data_raw) if existing_data_raw else {}
+
+    try:
+        # 3. Traitement des nouveaux fichiers s'il y en a
+        if files:
+            for file in files:
+                if not file.filename:
+                    continue
+
+                if not file.filename.endswith(".xlsx"):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"File {file.filename} is in wrong format"
+                    )
+
+                module_name, extract_type, _ = file.filename.split("_")
+                
+                active_module_status_map = next(
+                    (mod.get("statusMapping") for mod in modules_raw if mod.get("id") == module_name),
+                    None
+                )
+
+                if module_name not in modules_data:
+                    modules_data[module_name] = {}
+
+                file_content = await file.read()
+
+                modules_data[module_name][f"{extract_type}Entries"] = (
+                    get_jira_data(file_content, active_module_status_map)
+                    if extract_type == "jira"
+                    else m.get(extract_type)(file_content)
+                )
+
+                # Replacer le pointeur du fichier avant écriture disque
+                await file.seek(0)
+
+                destination = UPLOAD_DIR / slugify(project_name) / module_name / file.filename
+                await save_upload_file(file, destination)
+
+        # 4. Mise à jour des métadonnées (modules et date uniquement)
+        metadata["updatedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        metadata["modules"] = modules_raw
+
+        # 5. Persistance Redis
+        redis_client.set(f"projects:{project_id}:metadata", json.dumps(metadata))
+        redis_client.set(f"projects:{project_id}:data", json.dumps(modules_data))
+
+        with open('data.json', 'w', encoding='utf-8') as f:
+            json.dump(modules_data, f, ensure_ascii=False, indent=2)
+
+        return metadata
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Une erreur est survenue lors de la modification ! Veuillez revoir les fichiers importés."
+        )
