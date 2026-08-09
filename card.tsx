@@ -1103,3 +1103,53 @@ async def update_project(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Une erreur est survenue lors de la modification ! Veuillez revoir les fichiers importés."
         )
+
+
+
+
+
+
+
+
+
+
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_200_OK)
+async def delete_project(project_id: str):
+    # 1. Vérification de l'existence du projet dans Redis
+    metadata_raw = redis_client.get(f"projects:{project_id}:metadata")
+    if not metadata_raw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Le projet '{project_id}' n'existe pas."
+        )
+
+    metadata = json.loads(metadata_raw)
+    project_name = metadata.get("name", project_id)
+
+    try:
+        # 2. Suppression des clés Redis du projet
+        redis_client.delete(f"projects:{project_id}:metadata")
+        redis_client.delete(f"projects:{project_id}:data")
+
+        # 3. Retrait du projet dans la liste globale 'projects:all'
+        # On tente de supprimer aussi bien le project_id que le slug du nom si stocké ainsi
+        redis_client.lrem("projects:all", 0, project_id)
+        redis_client.lrem("projects:all", 0, slugify(project_name))
+
+        # 4. Suppression du dossier physique des fichiers sur le disque
+        project_dir = UPLOAD_DIR / slugify(project_name)
+        if project_dir.exists() and project_dir.is_dir():
+            shutil.rmtree(project_dir)
+
+        return {
+            "message": f"Le projet '{project_id}' et ses fichiers ont été supprimés avec succès.",
+            "id": project_id
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Une erreur est survenue lors de la suppression du projet : {str(e)}"
+        )
