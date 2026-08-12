@@ -216,3 +216,160 @@ async def update_project(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Une erreur est survenue lors de la modification ! Veuillez revoir les fichiers importés."
         )
+
+
+
+
+
+
+
+
+
+
+
+@router.get("/{project_id}/{module_id}/overview/", dependencies=[Depends(verify_valid_project), Depends(verify_valid_module)])
+async def get_overview(project_id: str, module_id: str):
+    # 1. Récupération directe des données du module spécifique depuis Redis
+    module_data = json.loads(await r.get(f"projects:{project_id}:module:{module_id}:data") or "{}")
+    project_metadata = json.loads(await r.get(f"projects:{project_id}:metadata") or "{}")
+
+    modules_list = project_metadata.get("modules") or []
+    module_metadata = next((m for m in modules_list if m.get("id") == module_id), {})
+
+    tickets = [t for t in module_data.get("jiraEntries") or [] if t.get("Clé de ticket") != "None"]
+    
+    rm_entries = module_data.get("rmEntries") or []
+    total_rm = len(rm_entries)
+
+    change_requests = [
+        t for t in tickets 
+        if "ChangeRequest" in (t.get("Tags") or []) and t.get("Type de ticket") == "Story"
+    ]
+
+    not_cr = [t for t in tickets if t not in change_requests] 
+    cr_count = len(change_requests)
+    not_cr_count = len(not_cr)
+    dev_cr_count = len([cr for cr in change_requests if cr.get("État") in ["En test", "En production"]])
+
+    get_pct_by_status = lambda status_name: round((len([t for t in not_cr if t.get("État") == status_name]) * 100 / not_cr_count), 1) if not_cr_count else 0.0
+
+    get_ticket_sp = lambda status_list: sum(
+        float(t.get("Champs personnalisés (Story Points)") or 0) 
+        for t in tickets if t.get("État") in status_list
+    )
+
+    # ---------------------------------------------------------
+    # CROISEMENT RM ✕ RESOURCES & CALCUL DU BUDGET / TEAMS
+    # ---------------------------------------------------------
+    resources = module_metadata.get("resources") or []
+    
+    # Mapping Nom -> TJM
+    resource_tjm_map = {
+        res.get("name"): float(res.get("tjm") or 0) 
+        for res in resources if res.get("name")
+    }
+
+    incurred_budget = 0.0
+    teams_summary = {}
+
+    for entry in rm_entries:
+        role = entry.get("Role") or "Inconnu"
+        person_name = entry.get("Name") or entry.get("Resource") or entry.get("Nom")
+        hours = float(entry.get("Incurred (hours)") or 0)
+
+        tjm = resource_tjm_map.get(person_name, 0.0)
+        incurred_budget += hours * tjm
+
+        if role not in teams_summary:
+            teams_summary[role] = {
+                "name": role,
+                "count": 0,
+                "hours": 0.0
+            }
+        teams_summary[role]["count"] += 1
+        teams_summary[role]["hours"] += hours
+
+    teams = []
+    for role, data in teams_summary.items():
+        count = data["count"]
+        teams.append({
+            "name": role,
+            "count": count,
+            "pct": round(count * 100 / total_rm, 1) if total_rm else 0.0,
+            "totalHours": round(data["hours"], 1)
+        })
+
+    # ---------------------------------------------------------
+    # METRIQUES QA ET TIMELINE
+    # ---------------------------------------------------------
+    qa_data = module_metadata.get("qa") or {}
+    test_runs = qa_data.get("testRuns") or []
+    metrics = qa_data.get("metrics") or {}
+
+    total_ok = sum(int(r.get("nbOk") or 0) for r in test_runs)
+    total_bloquant = sum(int(r.get("nbKoBloquant") or 0) for r in test_runs)
+    total_majeur = sum(int(r.get("nbKoMajeur") or 0) for r in test_runs)
+    total_mineur = sum(int(r.get("nbKoMineur") or 0) for r in test_runs)
+
+    total_tests = total_ok + total_bloquant + total_majeur + total_mineur
+
+    start_date = module_metadata.get("startDate")
+    mvp_end_date = module_metadata.get("mvpEndDate")
+    project_total_sp = float(module_metadata.get("totalSp") or 0)
+    total_budget = float(module_metadata.get("allocatedBudget") or 0)
+
+    timeline_pct = 0.0
+    if start_date and mvp_end_date:
+        try:
+            d_start = datetime.strptime(start_date, "%Y-%m-%d")
+            d_end = datetime.strptime(mvp_end_date, "%Y-%m-%d")
+            total_days = (d_end - d_start).total_seconds()
+            if total_days > 0:
+                elapsed_days = (datetime.now() - d_start).total_seconds()
+                timeline_pct = round(max(0, min(100, elapsed_days * 100 / total_days)), 1)
+        except ValueError:
+            pass
+
+    return {
+        "startDate": start_date,
+        "mvpEndDate": mvp_end_date,
+        "crEndDate": module_metadata.get("crEndDate"),
+        "teams": teams,
+        "backlogProgress": {
+            "cr": {
+                "count": cr_count,
+                "unestimatedCount": len([cr for cr in change_requests if not cr.get("Champs personnalisés (Story Points)")]),
+                "devCount": dev_cr_count,
+                "devProgressPct": round(dev_cr_count * 100 / cr_count, 1) if cr_count else 0.0
+            },
+            "workDistribution": {
+                "inWritingPct": get_pct_by_status("En écriture"),
+                "readyPct": get_pct_by_status("Prêt"),
+                "inDevPct": get_pct_by_status("En développement"),
+                "inTestPct": get_pct_by_status("En test"),
+                "inProdPct": get_pct_by_status("En prod"),
+            }
+        },
+        "qaProgress": {
+            "testPct": {
+                "directValidationPct": round((total_ok * 100 / total_tests), 1) if total_tests else 0.0,
+                "reworkBloquantPct": round((total_bloquant * 100 / total_tests), 1) if total_tests else 0.0,
+                "reworkMajeurPct": round((total_majeur * 100 / total_tests), 1) if total_tests else 0.0,
+                "reworkMineurPct": round((total_mineur * 100 / total_tests), 1) if total_tests else 0.0,
+            },
+            "metrics": {
+                "securityHotspots": float(metrics.get("securityHotspots") or 0.0),
+                "coverage": float(metrics.get("coverage") or 0.0),
+                "duplicatedLines": float(metrics.get("duplicatedLines") or 0.0),
+                "maintainabilityRating": metrics.get("maintainabilityRating") or "N/A",
+                "reliabilityRating": metrics.get("reliabilityRating") or "N/A",
+                "securityRating": metrics.get("securityRating") or "N/A"
+            }
+        },
+        "projectProgress": {
+            "timelinePct": timeline_pct,
+            "consumedPct": round(incurred_budget * 100 / total_budget, 1) if total_budget else 0.0,
+            "writtingPct": round(get_ticket_sp(["En test", "En production", "Prêt", "En développement"]) * 100 / project_total_sp, 1) if project_total_sp else 0.0,
+            "devPct": round(get_ticket_sp(["En test", "En production"]) * 100 / project_total_sp, 1) if project_total_sp else 0.0
+        },
+    }
