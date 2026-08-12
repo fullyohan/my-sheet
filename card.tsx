@@ -145,7 +145,7 @@ async def update_project(
         )
         
     metadata = json.loads(metadata_raw)
-    modules_raw = json.loads(modules_metadata)  # Liste d'objets ex: [{"id": "mod1", ...}, ...]
+    modules_raw = json.loads(modules_metadata)  # Ex: [{"id": "mod_123", "name": "Module A"}, ...]
     status_map_data = json.loads(status_mapping)
 
     project_name = metadata.get("name", project_id)
@@ -162,24 +162,21 @@ async def update_project(
                 if len(parts) < 2:
                     continue
                 
-                module_name = parts[0]
-                destination = project_dir / module_name / file.filename
+                # Ex: mod123_jira_2026.xlsx -> module_id = mod123
+                module_id = parts[0]
+                destination = project_dir / module_id / file.filename
                 
                 await file.seek(0)
                 await save_upload_file(file, destination)
 
-        # 2. ÉTAPE 2 : Recalcul global des données Redis pour TOUS les modules
+        # 2. ÉTAPE 2 : Recalcul global des données Redis pour TOUS les modules via leur ID
         for module_obj in modules_raw:
-            # Récupère l'identifiant du module dans l'objet (ex: module_obj["id"] ou module_obj["name"])
-            module_name = module_obj.get("id") or module_obj.get("name")
+            module_id = module_obj["id"]
             
-            if not module_name:
-                continue
-
-            module_dir = project_dir / module_name
-            module_key = f"projects:{project_id}:module:{module_name}:data"
+            module_dir = project_dir / module_id
+            module_key = f"projects:{project_id}:module:{module_id}:data"
             
-            # Réinitialisation à vide pour recalculer proprement les clés sans résidus
+            # Réinitialisation à vide pour recalculer proprement sans résidus
             module_data = {}
 
             if module_dir.exists():
@@ -205,7 +202,7 @@ async def update_project(
         # 3. ÉTAPE 3 : Mise à jour des métadonnées du projet
         metadata["statusMapping"] = status_map_data
         metadata["updatedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        metadata["modules"] = modules_raw  # Conserve la liste d'objets intacte
+        metadata["modules"] = modules_raw
 
         await r.set(f"projects:{project_id}:metadata", json.dumps(metadata))
 
