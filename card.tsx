@@ -135,7 +135,7 @@ async def update_project(
 @router.put("/{project_id}", dependencies=[Depends(verify_valid_project)])
 async def update_project(
     project_id: str,
-    status_mapping: str = Form(...),  # <- Obligatoire (Requis par Form)
+    status_mapping: str = Form(...),
     modules_metadata: str = Form(...),
     files: Optional[List[UploadFile]] = File(None)
 ):
@@ -147,32 +147,18 @@ async def update_project(
         )
         
     metadata = json.loads(metadata_raw)
-    modules_raw = json.loads(modules_metadata)
-    
-    # Décodage direct du JSON
-    try:
-        status_map_data = json.loads(status_mapping)
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Le champ status_mapping doit être une chaîne JSON valide."
-        )
+    modules_raw = json.loads(modules_metadata)  # Liste d'objets ex: [{"id": "mod1", ...}, ...]
+    status_map_data = json.loads(status_mapping)
 
     project_name = metadata.get("name", project_id)
     project_dir = UPLOAD_DIR / slugify(project_name)
 
     try:
-        # 1. ÉTAPE 1 : Écriture des NOUVEAUX fichiers sur le disque s'il y en a
+        # 1. ÉTAPE 1 : Sauvegarde des NOUVEAUX fichiers sur le disque s'il y en a
         if files:
             for file in files:
-                if not file.filename:
+                if not file.filename or not file.filename.endswith(".xlsx"):
                     continue
-
-                if not file.filename.endswith(".xlsx"):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Le fichier {file.filename} n'est pas au bon format (.xlsx attendu)"
-                    )
 
                 parts = file.filename.split("_")
                 if len(parts) < 2:
@@ -185,12 +171,18 @@ async def update_project(
                 await save_upload_file(file, destination)
 
         # 2. ÉTAPE 2 : Recalcul global des données Redis pour TOUS les modules
-        for module_name in modules_raw:
+        for module_obj in modules_raw:
+            # Récupère l'identifiant du module dans l'objet (ex: module_obj["id"] ou module_obj["name"])
+            module_name = module_obj.get("id") or module_obj.get("name")
+            
+            if not module_name:
+                continue
+
             module_dir = project_dir / module_name
             module_key = f"projects:{project_id}:module:{module_name}:data"
             
-            existing_module_raw = await r.get(module_key)
-            module_data = json.loads(existing_module_raw) if existing_module_raw else {}
+            # Réinitialisation à vide pour recalculer proprement les clés sans résidus
+            module_data = {}
 
             if module_dir.exists():
                 for excel_file in module_dir.glob("*.xlsx"):
@@ -204,7 +196,7 @@ async def update_project(
                     with open(excel_file, "rb") as f:
                         file_content = f.read()
 
-                    # Re-calcul systématique avec le status_mapping à jour
+                    # Re-calcul avec le status_mapping à jour
                     if extract_type == "jira":
                         module_data["jiraEntries"] = get_jira_data(file_content, status_map_data)
                     elif extract_type in m:
@@ -215,7 +207,7 @@ async def update_project(
         # 3. ÉTAPE 3 : Mise à jour des métadonnées du projet
         metadata["statusMapping"] = status_map_data
         metadata["updatedAt"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        metadata["modules"] = modules_raw
+        metadata["modules"] = modules_raw  # Conserve la liste d'objets intacte
 
         await r.set(f"projects:{project_id}:metadata", json.dumps(metadata))
 
