@@ -130,8 +130,6 @@ async def update_project(
 
 
 
-
-
 @router.put("/{project_id}", dependencies=[Depends(verify_valid_project)])
 async def update_project(
     project_id: str,
